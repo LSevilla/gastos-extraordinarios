@@ -22,6 +22,7 @@ import { createBreadcrumb } from '../components/breadcrumb.js';
  */
 export function renderManageCase(root, deps) {
   let pendingDeactivation = null; // id de beneficiario en confirmación
+  let pendingEdit = null; // id de beneficiario en edición
 
   render();
 
@@ -229,7 +230,64 @@ export function renderManageCase(root, deps) {
       const row = document.createElement('div');
       row.className = `beneficiary-row${beneficiary.isActive ? '' : ' is-inactive'}`;
 
-      if (pendingDeactivation === beneficiary.id.toString()) {
+      if (pendingEdit === beneficiary.id.toString()) {
+        const editForm = document.createElement('form');
+        editForm.noValidate = true;
+        editForm.className = 'stack-tight';
+        editForm.innerHTML = `
+          <div class="field-row">
+            <div class="field">
+              <label for="edit-b-first-${beneficiary.id.toString()}">Nombre</label>
+              <input id="edit-b-first-${beneficiary.id.toString()}" data-field="firstName" type="text" value="${escapeAttr(beneficiary.firstName)}" />
+            </div>
+            <div class="field">
+              <label for="edit-b-last-${beneficiary.id.toString()}">Apellido</label>
+              <input id="edit-b-last-${beneficiary.id.toString()}" data-field="lastName" type="text" value="${escapeAttr(beneficiary.lastName)}" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="edit-b-birth-${beneficiary.id.toString()}">Fecha de nacimiento (opcional)</label>
+              <input id="edit-b-birth-${beneficiary.id.toString()}" data-field="birthDate" type="date" value="${beneficiary.birthDate ? beneficiary.birthDate.toISOString().slice(0, 10) : ''}" />
+            </div>
+            <div class="field">
+              <label for="edit-b-notes-${beneficiary.id.toString()}">Relación o nota (opcional)</label>
+              <input id="edit-b-notes-${beneficiary.id.toString()}" data-field="notes" type="text" placeholder="Ej: Hijo mayor, enseñanza media" value="${escapeAttr(beneficiary.notes)}" />
+            </div>
+          </div>
+          <div class="field-row">
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary" id="cancel-edit-${beneficiary.id.toString()}">Cancelar</button>
+          </div>
+        `;
+        editForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          clearFieldErrors(editForm);
+          const birthDateValue = editForm.querySelector(
+            `#edit-b-birth-${beneficiary.id.toString()}`,
+          ).value;
+          const result = await deps.beneficiaryService.updateBeneficiary(beneficiary.id, {
+            firstName: editForm.querySelector(`#edit-b-first-${beneficiary.id.toString()}`).value,
+            lastName: editForm.querySelector(`#edit-b-last-${beneficiary.id.toString()}`).value,
+            birthDate: birthDateValue ? new Date(birthDateValue) : null,
+            notes: editForm.querySelector(`#edit-b-notes-${beneficiary.id.toString()}`).value,
+          });
+          if (result.isFailure()) {
+            applyFieldErrors(editForm, result.getError());
+            return;
+          }
+          pendingEdit = null;
+          showToast('Beneficiario actualizado.');
+          render();
+        });
+        editForm
+          .querySelector(`#cancel-edit-${beneficiary.id.toString()}`)
+          .addEventListener('click', () => {
+            pendingEdit = null;
+            render();
+          });
+        row.appendChild(editForm);
+      } else if (pendingDeactivation === beneficiary.id.toString()) {
         row.innerHTML = `
           <span class="body-text">¿Desactivar a ${escapeHtml(beneficiary.getFullName())}? Podrás volver a activarlo cuando quieras.</span>
         `;
@@ -269,6 +327,16 @@ export function renderManageCase(root, deps) {
           badge.textContent = 'Inactivo. Puedes volver a activarlo.';
           row.appendChild(badge);
         }
+
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'btn btn-secondary';
+        editButton.textContent = 'Editar';
+        editButton.addEventListener('click', () => {
+          pendingEdit = beneficiary.id.toString();
+          render();
+        });
+        row.appendChild(editButton);
 
         const actionButton = document.createElement('button');
         actionButton.type = 'button';

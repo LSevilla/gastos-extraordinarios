@@ -126,4 +126,38 @@ export class Beneficiary extends AggregateRoot {
     this.isActive = true;
     this.updatedAt = clock.utcNow();
   }
+
+  /**
+   * Campos editables: firstName, lastName, birthDate, notes. `caseId`,
+   * `isActive` (se maneja con deactivate()/reactivate()), `id` y
+   * `createdAt` nunca cambian por esta vía.
+   * @param {{firstName?: string, lastName?: string, birthDate?: Date|null, notes?: string}} changes
+   * @param {import('../../shared/clock.js').Clock} clock
+   * @param {ReadonlyArray<Beneficiary>} [existingBeneficiaries] - para volver a chequear duplicados, excluyéndose a sí mismo
+   * @returns {Result<void>}
+   */
+  update(changes, clock, existingBeneficiaries = []) {
+    const merged = {
+      firstName: changes.firstName ?? this.firstName,
+      lastName: changes.lastName ?? this.lastName,
+      birthDate: changes.birthDate !== undefined ? changes.birthDate : this.birthDate,
+    };
+    let validation = Beneficiary.validate(merged, clock);
+    const siblings = existingBeneficiaries.filter((other) => !other.id.equals(this.id));
+    if (Beneficiary.isObviousDuplicate(merged, siblings)) {
+      validation = validation.withError(
+        'firstName',
+        'BENEFICIARY_DUPLICATE',
+        'Ya existe un beneficiario activo con ese nombre y apellido en este caso.',
+      );
+    }
+    if (!validation.isValid()) return Result.fail(validation);
+
+    this.firstName = merged.firstName.trim();
+    this.lastName = merged.lastName.trim();
+    this.birthDate = merged.birthDate ?? null;
+    if (changes.notes !== undefined) this.notes = changes.notes.trim();
+    this.updatedAt = clock.utcNow();
+    return Result.ok(undefined);
+  }
 }

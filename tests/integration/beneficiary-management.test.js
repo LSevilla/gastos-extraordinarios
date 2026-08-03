@@ -68,3 +68,29 @@ test('un beneficiario reactivado ya no bloquea como duplicado a otro con el mism
   });
   assert.equal(result.isSuccess(), true);
 });
+
+test('updateBeneficiary() persiste los cambios en IndexedDB de verdad', async () => {
+  const { ctx, caseId } = await setup();
+  const [beneficiary] = (await ctx.beneficiaryService.listBeneficiaries(caseId)).getValue();
+
+  const result = await ctx.beneficiaryService.updateBeneficiary(beneficiary.id, {
+    firstName: 'Nombre Editado',
+    notes: 'Nota editada',
+  });
+  assert.equal(result.isSuccess(), true);
+
+  const list = await ctx.beneficiaryService.listBeneficiaries(caseId);
+  const updated = list.getValue().find((b) => b.id.equals(beneficiary.id));
+  assert.equal(updated.firstName, 'Nombre Editado');
+  assert.equal(updated.notes, 'Nota editada');
+});
+
+test('updateBeneficiary() sobre un id inexistente falla con un mensaje claro', async () => {
+  const { ctx } = await setup();
+  const { Identifier } = await import('../../src/shared/identifier.js');
+  const result = await ctx.beneficiaryService.updateBeneficiary(Identifier.generate(), {
+    firstName: 'X',
+  });
+  assert.equal(result.isFailure(), true);
+  assert.equal(result.getError().getErrors()[0].code, 'BENEFICIARY_NOT_FOUND');
+});

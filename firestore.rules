@@ -87,15 +87,31 @@ service cloud.firestore {
     match /caseMemberships/{membershipId} {
       allow read: if isSignedIn()
         && (resource.data.userId == request.auth.uid || canManageMembers(resource.data.caseId));
-      allow create: if isSignedIn()
-        && canManageMembers(request.resource.data.caseId)
-        && !isOwnerRole(request.resource.data);
-      // Nunca se permite que alguien se autoasigne una membresía propia —
-      // toda membresía nace de aceptar una invitación, gestionada por
-      // MembershipService, nunca escrita directo desde el cliente salvo
-      // por quien ya es owner del caso. Tampoco se permite crear una
-      // membresía owner por esta vía — el owner nace únicamente al
-      // crear el caso (bootstrapOwnerMembership), nunca por invitación.
+      // Defecto real corregido: la versión anterior exigía canManageMembers()
+      // (tener ya una membresía owner) para crear CUALQUIER membresía —
+      // incluida la primera, lo cual es una paradoja imposible de cumplir
+      // (nadie puede ser el primer owner porque hace falta ser owner para
+      // crearlo). Se separan explícitamente dos casos:
+      allow create: if isSignedIn() && (
+        // Caso normal: un owner existente invita/crea una membresía para
+        // otra persona — nunca puede otorgar el rol owner por esta vía.
+        (canManageMembers(request.resource.data.caseId) && !isOwnerRole(request.resource.data))
+        ||
+        // Caso de arranque: la primera persona que crea un caso se asigna
+        // a sí misma como owner — solo si todavía no tiene ninguna
+        // membresía en ESE caso específico (bootstrapOwnerMembership).
+        // Riesgo residual documentado: caseId es un UUID generado
+        // (Identifier.generate()), no adivinable — mismo criterio ya
+        // usado para el id de las invitaciones. Endurecer esto más allá
+        // exigiría una Cloud Function, fuera de alcance de esta
+        // corrección puntual.
+        (!activeMembership(request.resource.data.caseId)
+          && isOwnerRole(request.resource.data)
+          && request.resource.data.userId == request.auth.uid)
+      );
+      // Nunca se permite que alguien se autoasigne una membresía propia
+      // que no sea el arranque descrito arriba — toda membresía posterior
+      // nace de aceptar una invitación, gestionada por MembershipService.
       allow update: if isSignedIn()
         && canManageMembers(resource.data.caseId)
         && preservesOwnerUnderCurrentModel(resource.data, request.resource.data);

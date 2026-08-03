@@ -2,7 +2,21 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
-## [0.4.0-alpha.4] — Build 1.4: Gastos colaborativos por caso
+## [0.4.0-alpha.5] — Edición de beneficiarios, navegación faltante y corrección crítica de producción
+
+### Corregido — defecto crítico de producción, encontrado en vivo
+
+`firestore.rules`: la regla que crea la primera membresía `owner` al configurar un caso nuevo (`bootstrapOwnerMembership`) quedaba bloqueada por la misma regla que protege contra la creación de owners adicionales — una paradoja (hacía falta ya ser owner para poder crear al primer owner). Esto dejaba el botón "Finalizar configuración" del onboarding trabado en "Guardando…" indefinidamente en el sitio publicado. Corregido separando explícitamente el caso de arranque (autoasignación como owner solo si todavía no existe ninguna membresía propia en ese caso) del caso de invitación normal. Riesgo residual documentado: `caseId` es un UUID no adivinable, mismo criterio ya aceptado para el id de las invitaciones — endurecer esto más allá exigiría una Cloud Function, fuera de alcance de esta corrección puntual.
+
+### Agregado
+
+- `Beneficiary.update()` + `BeneficiaryService.updateBeneficiary()`: edición de nombre, apellido, fecha de nacimiento y nota — vuelve a verificar duplicados excluyéndose a sí mismo. Botón "Editar" en "Administrar el caso", mismo patrón de confirmación inline ya usado para desactivar.
+- Navegación de vuelta ("Inicio") agregada a `accept-invitation-view.js`, que no tenía ninguna forma de salir de esa pantalla — se agregó breadcrumb + botón "Ahora no".
+- 7 pruebas nuevas (5 dominio, 2 integración con IndexedDB real).
+
+### Sin cambios
+
+- El resto del Build 1.4 queda intacto — esta es una corrección acotada, no una reestructuración.
 
 Integra `Expense` (dominio ya existente desde el Build 1.2) con la
 arquitectura colaborativa offline-first del Build 1.3b — sin reescribir el

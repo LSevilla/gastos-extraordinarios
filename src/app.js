@@ -296,6 +296,7 @@ async function main() {
         currentUserId: currentUserProfile.id,
         currentUserEmail: currentUserProfile.email,
         onDone: () => navigate('home'),
+        onBack: () => navigate('home'),
       });
       return;
     }

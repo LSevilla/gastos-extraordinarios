@@ -46,6 +46,31 @@ export class BeneficiaryService {
 
   /**
    * @param {import('../../shared/identifier.js').Identifier} beneficiaryId
+   * @param {{firstName?: string, lastName?: string, birthDate?: Date|null, notes?: string}} changes
+   * @returns {Promise<Result<void>>}
+   */
+  async updateBeneficiary(beneficiaryId, changes) {
+    const beneficiary = await this.deps.beneficiaryRepo.findById(beneficiaryId);
+    if (!beneficiary) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'beneficiary',
+            code: 'BENEFICIARY_NOT_FOUND',
+            message: 'No se encontró el beneficiario.',
+          },
+        ]),
+      );
+    }
+    const siblings = await this.deps.beneficiaryRepo.findByCaseId(beneficiary.caseId);
+    const result = beneficiary.update(changes, this.deps.clock, siblings);
+    if (result.isFailure()) return result;
+    await this.deps.beneficiaryRepo.save(beneficiary);
+    return Result.ok(undefined);
+  }
+
+  /**
+   * @param {import('../../shared/identifier.js').Identifier} beneficiaryId
    * @returns {Promise<Result<void>>}
    */
   async deactivateBeneficiary(beneficiaryId) {
