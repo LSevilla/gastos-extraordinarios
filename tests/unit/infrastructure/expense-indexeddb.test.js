@@ -39,8 +39,13 @@ async function freshDb() {
   return openDatabase(`expense-indexeddb-test-${Date.now()}-${counter}`);
 }
 
-test('Build 1.4 no requirió subir la versión del esquema IndexedDB (decisión aprobada)', () => {
-  assert.equal(DATABASE_VERSION, 4);
+// Esta prueba fija la versión del esquema a propósito: obliga a que
+// cualquier cambio de versión sea una decisión consciente y no un efecto
+// secundario. El Build 1.4 la dejó en 4 (no necesitó migración). El Build
+// 1.5 la sube a 5 al agregar el store `reimbursements` — migración
+// estrictamente aditiva, verificada en tests/integration/schema-migration.test.js.
+test('la versión del esquema IndexedDB es la del Build 1.5 (5), subida solo por el store de reembolsos', () => {
+  assert.equal(DATABASE_VERSION, 5);
 });
 
 test('guardar y recuperar un gasto por ID conserva todos los campos, incluidos los nuevos de auditoría', async () => {

@@ -15,6 +15,7 @@ import { Identifier } from '../../shared/identifier.js';
 
 const CASES_COLLECTION = 'cases';
 const EXPENSES_COLLECTION = 'expenses';
+const REIMBURSEMENTS_COLLECTION = 'reimbursements';
 
 export class SyncEngine {
   /**
@@ -22,6 +23,7 @@ export class SyncEngine {
    *   operationQueueRepo: import('../../domain/synchronization/operation-queue-repository.js').OperationQueueRepository,
    *   caseRepo: import('../../domain/cases/case-repository.js').CaseRepository,
    *   expenseRepo?: import('../../domain/expenses/expense-repository.js').ExpenseRepository,
+   *   reimbursementRepo?: import('../../domain/reimbursements/reimbursement-repository.js').ReimbursementRepository,
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
@@ -66,6 +68,24 @@ export class SyncEngine {
   }
 
   /**
+   * Encola la sincronización de un reembolso — mismo criterio genérico que
+   * `sync:case` y `sync:expense` (Build 1.5): el payload solo lleva el id;
+   * el procesador resuelve por sí mismo si es creación, edición o anulación
+   * leyendo el estado actual en IndexedDB. No existe un tipo distinto por
+   * cada operación.
+   * @param {Identifier} reimbursementId
+   * @returns {Promise<void>}
+   */
+  async enqueueReimbursementSync(reimbursementId) {
+    const entry = OperationQueueEntry.create(
+      'sync:reimbursement',
+      { reimbursementId: reimbursementId.toString() },
+      this.deps.clock,
+    );
+    await this.deps.operationQueueRepo.save(entry);
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.
@@ -91,6 +111,16 @@ export class SyncEngine {
             findById: (id) => this.deps.expenseRepo.findById(id),
             push: (entity) => this.#pushExpenseToFirestore(entity),
             logLabel: 'sync:expense',
+          },
+        );
+      } else if (entry.type === 'sync:reimbursement') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.reimbursementId).getValue(),
+          {
+            findById: (id) => this.deps.reimbursementRepo.findById(id),
+            push: (entity) => this.#pushReimbursementToFirestore(entity),
+            logLabel: 'sync:reimbursement',
           },
         );
       }
@@ -173,6 +203,32 @@ export class SyncEngine {
   }
 
   /**
+   * @param {import('../../domain/reimbursements/reimbursement.js').Reimbursement} reimbursement
+   */
+  async #pushReimbursementToFirestore(reimbursement) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const ref = fs.doc(firestore, REIMBURSEMENTS_COLLECTION, reimbursement.id.toString());
+    await fs.setDoc(ref, {
+      expenseId: reimbursement.expenseId.toString(),
+      caseId: reimbursement.caseId.toString(),
+      institution: reimbursement.institution,
+      resolution: reimbursement.resolution,
+      amount: reimbursement.amount.getAmount(),
+      currency: reimbursement.amount.getCurrency(),
+      receivedAt: reimbursement.receivedAt.toISOString(),
+      receivedByParticipantId: reimbursement.receivedByParticipantId.toString(),
+      notes: reimbursement.notes,
+      createdAt: reimbursement.createdAt.toISOString(),
+      updatedAt: reimbursement.updatedAt.toISOString(),
+      deletedAt: reimbursement.deletedAt ? reimbursement.deletedAt.toISOString() : null,
+      createdByUserId: reimbursement.createdByUserId,
+      updatedByUserId: reimbursement.updatedByUserId,
+      cancelledByUserId: reimbursement.cancelledByUserId,
+      cancellationReason: reimbursement.cancellationReason,
+    });
+  }
+
+  /**
    * Escucha cambios remotos de un caso y los aplica sobre IndexedDB — nunca
    * los expone directo a la interfaz.
    * @param {Identifier} caseId
@@ -206,6 +262,27 @@ export class SyncEngine {
       fs.where('caseId', '==', caseId.toString()),
     );
     const unsubscribe = fs.onSnapshot(expensesQuery, (querySnap) => {
+      querySnap.docs.forEach((docSnap) => onRemoteChange(docSnap.data(), docSnap.id));
+    });
+    this.unsubscribers.push(unsubscribe);
+    return unsubscribe;
+  }
+
+  /**
+   * Escucha cambios remotos sobre TODOS los reembolsos de un caso — mismo
+   * principio que `listenForRemoteExpenseChanges`: se aplican sobre
+   * IndexedDB, nunca directo a la interfaz.
+   * @param {Identifier} caseId
+   * @param {(remoteData: object, reimbursementId: string) => Promise<void>} onRemoteChange
+   * @returns {() => void} desuscripción
+   */
+  listenForRemoteReimbursementChanges(caseId, onRemoteChange) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const reimbursementsQuery = fs.query(
+      fs.collection(firestore, REIMBURSEMENTS_COLLECTION),
+      fs.where('caseId', '==', caseId.toString()),
+    );
+    const unsubscribe = fs.onSnapshot(reimbursementsQuery, (querySnap) => {
       querySnap.docs.forEach((docSnap) => onRemoteChange(docSnap.data(), docSnap.id));
     });
     this.unsubscribers.push(unsubscribe);

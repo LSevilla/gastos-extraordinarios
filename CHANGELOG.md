@@ -2,6 +2,86 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.6] — Build 1.5: Registrar un reembolso y monto neto por gasto
+
+Un reembolso siempre está vinculado a un gasto existente: no existe el
+reembolso suelto. Reutiliza `Document` sin modificarlo (`relatedEntityType`
+ya admitía `'reimbursement'` desde el Build 1.2) y el mismo patrón
+colaborativo `OperationQueue` + `SyncEngine` del Build 1.4.
+
+### Agregado
+
+- **Dominio `Reimbursement`**: institución (catálogo cerrado: Isapre, Fonasa,
+  Seguro complementario, Otra), resolución (aprobado/rechazado), monto, fecha,
+  quién lo recibió, notas, comprobante opcional, auditoría
+  (`createdByUserId`/`updatedByUserId`) y anulación lógica. `deletedAt` sigue
+  siendo la única fuente persistida de la condición activo/anulado — no se
+  introdujo ningún campo `status` paralelo.
+- **`calculateExpenseNet()`** (función pura, sin repositorios ni reloj):
+  monto original − reembolsos aprobados y activos = neto, repartido según el
+  tramo de vigencia **congelado** en el gasto, nunca el vigente hoy. El resto
+  del redondeo se asigna de forma determinista a la parte B para que las dos
+  partes sumen exactamente el neto.
+- **`ReimbursementService`**: permisos por membresía real del caso (leer exige
+  `canRead()`; registrar, editar y anular exigen `canWrite()`), registro con
+  comprobante en un único commit atómico, anulación con motivo obligatorio, y
+  `getExpenseNet()`.
+- **Migración IndexedDB v4→v5**, estrictamente aditiva: crea el store
+  `reimbursements` (índices `expenseId`, `caseId`, `receivedAt`) sin tocar
+  ningún store existente.
+- **`sync:reimbursement`**: nuevo tipo en la cola de operaciones, con su
+  procesador, su subida a la colección `reimbursements/{id}` de Firestore y su
+  escucha de cambios remotos por caso.
+- **`firestore.rules`**: colección `reimbursements` con denegación por
+  defecto, campos inmutables protegidos (`caseId`, `expenseId`, `createdAt`,
+  `createdByUserId`) y `allow delete: if false` — la anulación nunca es un
+  borrado físico.
+- **Interfaz**: sección "Reembolsos y monto neto" en el detalle del gasto, con
+  resumen del reparto, bitácora completa (aprobados, rechazados y anulados,
+  visualmente distinguidos), formulario de registro y anulación con
+  confirmación inline. La acción "Registrar un reembolso" del menú principal
+  queda habilitada y lleva a elegir el gasto.
+- **41 pruebas nuevas** (14 dominio `Reimbursement`, 11 cálculo del neto, 11
+  aplicación, 4 sincronización, 1 migración de esquema). Total: **411**.
+
+### Reglas de negocio aplicadas
+
+- Cualquier participante con permiso de escritura puede registrar un
+  reembolso, sin importar quién pagó el gasto original.
+- Un reembolso **rechazado** queda registrado en la bitácora del gasto pero
+  **no** reduce el monto neto; se informa aparte.
+- Un reembolso **anulado** deja de descontar, pero sigue visible.
+- El total reembolsado no puede superar el monto del gasto
+  (`REIMBURSEMENT_EXCEEDS_EXPENSE`). Los rechazados no consumen esa capacidad.
+- Un reembolso aprobado exige monto mayor a cero; uno rechazado admite cero.
+- No se puede registrar un reembolso sobre un gasto anulado.
+- `expenseId` es inmutable: mover un reembolso alteraría el neto de dos gastos
+  a la vez. Para corregirlo se anula y se registra de nuevo, lo que deja rastro.
+
+### Cambiado
+
+- `tests/unit/infrastructure/expense-indexeddb.test.js`: la prueba que fijaba
+  `DATABASE_VERSION = 4` (candado deliberado del Build 1.4) pasa a fijar 5,
+  documentando que la subida corresponde solo al store de reembolsos.
+- `tests/component/home-actions.test.js`: la lista de acciones habilitadas
+  ahora incluye `reimbursement`.
+
+### Fuera de alcance, declarado
+
+- Esto **no** es el módulo "Estado de cuenta": calcula un gasto a la vez, sin
+  período, sin saldos acumulados y sin consolidar entre gastos.
+- No existe integración con APIs de Isapres ni aseguradoras: el registro es
+  siempre manual. Cuando un gasto está marcado como "se espera reembolso" y
+  todavía no tiene ninguno, la interfaz lo señala explícitamente.
+
+### Limitación conocida del entorno, sin cambios
+
+- Las pruebas de `firestore.rules` siguen escritas y verificadas
+  sintácticamente, pero no ejecutables en el entorno de desarrollo: la descarga
+  del `.jar` del emulador de Firestore requiere un dominio fuera de la lista de
+  acceso permitida. Las reglas nuevas de `reimbursements` heredan esta misma
+  limitación y deben verificarse en el proyecto real antes de confiar en ellas.
+
 ## [0.4.0-alpha.5] — Edición de beneficiarios, navegación faltante y corrección crítica de producción
 
 ### Corregido — defecto crítico de producción, encontrado en vivo

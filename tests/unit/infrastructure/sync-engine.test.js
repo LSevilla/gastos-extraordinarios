@@ -8,6 +8,9 @@ import { IndexedDbExpenseRepository } from '../../../src/infrastructure/indexedd
 import { SyncEngine } from '../../../src/infrastructure/synchronization/sync-engine.js';
 import { SyncingCaseRepository } from '../../../src/infrastructure/synchronization/syncing-case-repository.js';
 import { SyncingExpenseRepository } from '../../../src/infrastructure/synchronization/syncing-expense-repository.js';
+import { IndexedDbReimbursementRepository } from '../../../src/infrastructure/indexeddb/repositories/indexeddb-reimbursement-repository.js';
+import { SyncingReimbursementRepository } from '../../../src/infrastructure/synchronization/syncing-reimbursement-repository.js';
+import { Reimbursement } from '../../../src/domain/reimbursements/reimbursement.js';
 import { Case } from '../../../src/domain/cases/case.js';
 import { Expense } from '../../../src/domain/expenses/expense.js';
 import { Identifier } from '../../../src/shared/identifier.js';
@@ -23,11 +26,13 @@ async function buildContext() {
   const operationQueueRepo = new IndexedDbOperationQueueRepository(db);
   const rawCaseRepo = new IndexedDbCaseRepository(db);
   const rawExpenseRepo = new IndexedDbExpenseRepository(db);
+  const rawReimbursementRepo = new IndexedDbReimbursementRepository(db);
   const { firestore, firestoreModule } = createFakeFirestoreModule();
   const syncEngine = new SyncEngine({
     operationQueueRepo,
     caseRepo: rawCaseRepo,
     expenseRepo: rawExpenseRepo,
+    reimbursementRepo: rawReimbursementRepo,
     firestore,
     firestoreModule,
     clock,
@@ -39,12 +44,20 @@ async function buildContext() {
     operationQueueRepo,
     clock,
   });
+  const reimbursementRepo = new SyncingReimbursementRepository({
+    inner: rawReimbursementRepo,
+    syncEngine,
+    operationQueueRepo,
+    clock,
+  });
   return {
     operationQueueRepo,
     rawCaseRepo,
     caseRepo,
     rawExpenseRepo,
     expenseRepo,
+    rawReimbursementRepo,
+    reimbursementRepo,
     syncEngine,
     firestoreModule,
   };
@@ -278,4 +291,102 @@ test('sync:case y sync:expense conviven en la misma cola sin interferirse', asyn
   const result = await syncEngine.processPending();
   assert.equal(result.processed, 2);
   assert.equal(result.failed, 0);
+});
+
+// ---- Build 1.5 — sync:reimbursement ----
+
+function buildReimbursement(expenseId, caseId, overrides = {}) {
+  return Reimbursement.create(
+    {
+      expenseId,
+      caseId,
+      institution: 'isapre',
+      resolution: 'approved',
+      amountValue: 25000,
+      receivedAt: new Date('2025-12-01'),
+      receivedByParticipantId: Identifier.generate(),
+      createdByUserId: 'uid-quien-registra',
+      ...overrides,
+    },
+    clock,
+  ).getValue();
+}
+
+test('SyncingReimbursementRepository.save() persiste local y encola sync:reimbursement', async () => {
+  const { reimbursementRepo, rawReimbursementRepo, operationQueueRepo } = await buildContext();
+  const reimbursement = buildReimbursement(Identifier.generate(), Identifier.generate());
+
+  await reimbursementRepo.save(reimbursement);
+
+  const stored = await rawReimbursementRepo.findById(reimbursement.id);
+  assert.ok(stored, 'la copia local debe confirmarse siempre, sin depender de la red');
+
+  const pending = await operationQueueRepo.findPending();
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].type, 'sync:reimbursement');
+  assert.equal(pending[0].payload.reimbursementId, reimbursement.id.toString());
+});
+
+test('SyncEngine.processPending() sube un reembolso a Firestore con su resolución y auditoría', async () => {
+  const { reimbursementRepo, syncEngine, firestoreModule } = await buildContext();
+  const caseId = Identifier.generate();
+  const expenseId = Identifier.generate();
+  const reimbursement = buildReimbursement(expenseId, caseId);
+
+  await reimbursementRepo.save(reimbursement);
+  const { processed, failed } = await syncEngine.processPending();
+
+  assert.equal(processed, 1);
+  assert.equal(failed, 0);
+  const remote = firestoreModule.__debugGetRaw('reimbursements', reimbursement.id.toString());
+  assert.ok(remote, 'debe existir en la colección reimbursements');
+  assert.equal(remote.caseId, caseId.toString());
+  assert.equal(remote.expenseId, expenseId.toString());
+  assert.equal(remote.resolution, 'approved');
+  assert.equal(remote.amount, 25000);
+  assert.equal(remote.createdByUserId, 'uid-quien-registra');
+  assert.equal(remote.deletedAt, null);
+});
+
+test('anular un reembolso y volver a guardarlo sincroniza la anulación, nunca un borrado', async () => {
+  const { reimbursementRepo, syncEngine, firestoreModule } = await buildContext();
+  const reimbursement = buildReimbursement(Identifier.generate(), Identifier.generate());
+  await reimbursementRepo.save(reimbursement);
+  await syncEngine.processPending();
+
+  reimbursement.cancel('monto mal ingresado', 'uid-quien-anula', clock);
+  await reimbursementRepo.save(reimbursement);
+  await syncEngine.processPending();
+
+  const remote = firestoreModule.__debugGetRaw('reimbursements', reimbursement.id.toString());
+  assert.ok(remote, 'el documento sigue existiendo — la anulación nunca es un delete');
+  assert.ok(remote.deletedAt);
+  assert.equal(remote.cancelledByUserId, 'uid-quien-anula');
+  assert.equal(remote.cancellationReason, 'monto mal ingresado');
+});
+
+test('sync:case, sync:expense y sync:reimbursement conviven en la misma cola sin interferirse', async () => {
+  const { caseRepo, expenseRepo, reimbursementRepo, syncEngine, operationQueueRepo } =
+    await buildContext();
+
+  const caseEntity = Case.create(
+    { name: 'Caso mixto', operationMode: 'individual' },
+    clock,
+  ).getValue();
+  await caseRepo.save(caseEntity);
+  const expense = buildExpense();
+  await expenseRepo.save(expense);
+  await reimbursementRepo.save(buildReimbursement(expense.id, expense.caseId));
+
+  const pendingBefore = await operationQueueRepo.findPending();
+  assert.deepEqual(pendingBefore.map((entry) => entry.type).sort(), [
+    'sync:case',
+    'sync:expense',
+    'sync:reimbursement',
+  ]);
+
+  const { processed, failed } = await syncEngine.processPending();
+  assert.equal(processed, 3);
+  assert.equal(failed, 0);
+  assert.equal((await operationQueueRepo.findPending()).length, 0);
 });

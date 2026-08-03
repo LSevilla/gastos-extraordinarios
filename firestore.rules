@@ -145,6 +145,37 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Reembolsos ----
+    // Build 1.5: reimbursements/{reimbursementId} como colección superior,
+    // con caseId como campo — mismo criterio ya aprobado para expenses
+    // (decisión D.3 del Build 1.4). El `caseId` que llega en el payload no
+    // se cree por sí solo: canWrite() lo verifica contra la membresía real.
+    //
+    // `expenseId` es inmutable a propósito: mover un reembolso de un gasto
+    // a otro alteraría retroactivamente el monto neto de dos gastos a la
+    // vez. Si hace falta corregirlo, se anula y se registra de nuevo, lo
+    // que deja rastro. Misma lógica que en Reimbursement.update().
+
+    function immutableReimbursementFieldsUnchanged() {
+      let protectedKeys = ['caseId', 'expenseId', 'createdAt', 'createdByUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys) == false;
+    }
+
+    match /reimbursements/{reimbursementId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn()
+        && canWrite(request.resource.data.caseId)
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && immutableReimbursementFieldsUnchanged()
+        && request.resource.data.updatedByUserId == request.auth.uid;
+      // Nunca eliminación física — la anulación es una actualización que
+      // establece deletedAt/cancelledByUserId/cancellationReason, igual que
+      // en expenses.
+      allow delete: if false;
+    }
+
     // ---- Invitaciones ----
 
     match /invitations/{invitationId} {

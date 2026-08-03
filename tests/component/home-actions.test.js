@@ -19,7 +19,7 @@ test('existen exactamente las 6 acciones pedidas, en el orden pedido', () => {
 
 test('"Registrar un gasto", "Adjuntar un comprobante" y "Administrar el caso" están habilitadas en este Build', () => {
   const enabled = ACTIONS.filter((a) => a.enabled).map((a) => a.id);
-  assert.deepEqual(enabled.sort(), ['document', 'expense', 'manageCase'].sort());
+  assert.deepEqual(enabled.sort(), ['document', 'expense', 'manageCase', 'reimbursement'].sort());
 });
 
 test('cada acción tiene un ícono del catálogo y un texto de ayuda no vacío', () => {

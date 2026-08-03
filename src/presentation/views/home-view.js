@@ -16,7 +16,7 @@ export const ACTIONS = [
     label: 'Registrar un reembolso',
     icon: 'reimbursement',
     help: 'Registra un monto recibido desde Isapre, Fonasa, seguro u otra institución.',
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'payment',

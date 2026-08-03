@@ -23,6 +23,7 @@ import { IndexedDbUserProfileRepository } from './infrastructure/indexeddb/repos
 import { IndexedDbOperationQueueRepository } from './infrastructure/indexeddb/repositories/indexeddb-operation-queue-repository.js';
 import { IndexedDbCaseMembershipRepository } from './infrastructure/indexeddb/repositories/indexeddb-case-membership-repository.js';
 import { IndexedDbInvitationRepository } from './infrastructure/indexeddb/repositories/indexeddb-invitation-repository.js';
+import { IndexedDbReimbursementRepository } from './infrastructure/indexeddb/repositories/indexeddb-reimbursement-repository.js';
 import { createFirebaseAuthProvider } from './infrastructure/firebase/firebase-auth-provider.js';
 import { getFirestoreClient } from './infrastructure/firebase/firestore-client.js';
 import { FirestoreCaseMembershipRepository } from './infrastructure/firebase/firestore-case-membership-repository.js';
@@ -30,6 +31,7 @@ import { FirestoreInvitationRepository } from './infrastructure/firebase/firesto
 import { SyncEngine } from './infrastructure/synchronization/sync-engine.js';
 import { SyncingCaseRepository } from './infrastructure/synchronization/syncing-case-repository.js';
 import { SyncingExpenseRepository } from './infrastructure/synchronization/syncing-expense-repository.js';
+import { SyncingReimbursementRepository } from './infrastructure/synchronization/syncing-reimbursement-repository.js';
 import { DualCaseMembershipRepository } from './infrastructure/synchronization/dual-case-membership-repository.js';
 import { DualInvitationRepository } from './infrastructure/synchronization/dual-invitation-repository.js';
 import { firebaseConfig } from './infrastructure/firebase/firebase-config.js';
@@ -38,6 +40,7 @@ import { CaseService } from './application/services/case-service.js';
 import { BeneficiaryService } from './application/services/beneficiary-service.js';
 import { DocumentService } from './application/services/document-service.js';
 import { ExpenseService } from './application/services/expense-service.js';
+import { ReimbursementService } from './application/services/reimbursement-service.js';
 import { AuthService } from './application/services/auth-service.js';
 import { MembershipService } from './application/services/membership-service.js';
 import { Clock } from './shared/clock.js';
@@ -71,6 +74,7 @@ async function main() {
   const operationQueueRepo = new IndexedDbOperationQueueRepository(db);
   const caseMembershipLocalRepo = new IndexedDbCaseMembershipRepository(db);
   const invitationLocalRepo = new IndexedDbInvitationRepository(db);
+  const rawReimbursementRepo = new IndexedDbReimbursementRepository(db);
 
   // ADR-017: Firestore se inicializa una sola vez (firebase-app.js) y se
   // comparte entre AuthProvider y el motor de sincronización.
@@ -80,6 +84,7 @@ async function main() {
     operationQueueRepo,
     caseRepo: rawCaseRepo,
     expenseRepo: rawExpenseRepo,
+    reimbursementRepo: rawReimbursementRepo,
     firestore,
     firestoreModule,
     clock,
@@ -93,6 +98,13 @@ async function main() {
   // igual, sin saber que existe sincronización.
   const expenseRepo = new SyncingExpenseRepository({
     inner: rawExpenseRepo,
+    syncEngine,
+    operationQueueRepo,
+    clock,
+  });
+  // Build 1.5 — mismo decorador transparente para Reimbursement.
+  const reimbursementRepo = new SyncingReimbursementRepository({
+    inner: rawReimbursementRepo,
     syncEngine,
     operationQueueRepo,
     clock,
@@ -125,6 +137,9 @@ async function main() {
         STORE_NAMES.DOCUMENTS,
         STORE_NAMES.DOCUMENT_BLOBS,
         STORE_NAMES.OPERATION_QUEUE,
+        // Build 1.5 — permite registrar un reembolso y su comprobante en un
+        // único commit, igual que ya ocurría con gasto + comprobante.
+        STORE_NAMES.REIMBURSEMENTS,
       ],
       'readwrite',
       work,
@@ -153,6 +168,17 @@ async function main() {
     documentRepo,
     percentagePeriodRepo,
     membershipRepo: caseMembershipRepo,
+    documentService,
+    clock,
+    runAtomicWrite,
+  });
+
+  const reimbursementService = new ReimbursementService({
+    reimbursementRepo,
+    expenseRepo,
+    percentagePeriodRepo,
+    membershipRepo: caseMembershipRepo,
+    documentRepo,
     documentService,
     clock,
     runAtomicWrite,
@@ -236,6 +262,7 @@ async function main() {
       await renderExpenseDetail(root, {
         expenseService,
         documentService,
+        reimbursementService,
         expenseId: params.expenseId,
         beneficiaries,
         participants: summary.participants,
@@ -254,6 +281,11 @@ async function main() {
           else if (actionId === 'expense') {
             if (canWriteExpenses) navigate('registerExpense');
             else showToast('No tienes permiso para registrar gastos en este caso.');
+          } else if (actionId === 'reimbursement') {
+            // El reembolso siempre se registra desde el gasto al que
+            // pertenece — no existe el reembolso suelto. La acción del menú
+            // lleva a elegir el gasto, no a un formulario aparte.
+            navigate('expensesList');
           } else if (actionId === 'document')
             navigate('expensesList', { initialFilter: 'pending' });
           else showToast('Esta función estará disponible en el próximo módulo.');

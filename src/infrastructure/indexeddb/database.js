@@ -5,7 +5,7 @@
 // beneficiaries, appSettings. v2 (Build 1.2): agrega expenses, documents,
 // documentBlobs — migración aditiva, no toca ningún store existente.
 export const DATABASE_NAME = 'gastos-extraordinarios-db';
-export const DATABASE_VERSION = 4;
+export const DATABASE_VERSION = 5;
 
 export const STORE_NAMES = Object.freeze({
   CASES: 'cases',
@@ -20,6 +20,7 @@ export const STORE_NAMES = Object.freeze({
   OPERATION_QUEUE: 'operationQueue',
   CASE_MEMBERSHIPS: 'caseMemberships',
   INVITATIONS: 'invitations',
+  REIMBURSEMENTS: 'reimbursements',
 });
 
 /**
@@ -97,6 +98,21 @@ export function runMigrationV4(db) {
 }
 
 /**
+ * Build 1.5 — reembolsos. Migración estrictamente ADITIVA: crea un único
+ * store nuevo y no toca ni un solo store existente, así que ninguna base ya
+ * instalada pierde datos al actualizar. `expenseId` es el índice principal
+ * (el detalle de un gasto siempre pregunta por sus reembolsos); `caseId`
+ * existe para el día del estado de cuenta, que preguntará por caso.
+ * @param {IDBDatabase} db
+ */
+export function runMigrationV5(db) {
+  const reimbursements = db.createObjectStore(STORE_NAMES.REIMBURSEMENTS, { keyPath: 'id' });
+  reimbursements.createIndex('expenseId', 'expenseId');
+  reimbursements.createIndex('caseId', 'caseId');
+  reimbursements.createIndex('receivedAt', 'receivedAt');
+}
+
+/**
  * Abre (y si corresponde, crea/migra) la base de datos. Usa el `indexedDB`
  * global — en el navegador es el nativo; en pruebas, `fake-indexeddb` lo
  * reemplaza antes de importar este módulo (Development Handbook, Capítulo 9).
@@ -120,6 +136,9 @@ export function openDatabase(databaseName = DATABASE_NAME) {
       }
       if (event.oldVersion < 4) {
         runMigrationV4(db);
+      }
+      if (event.oldVersion < 5) {
+        runMigrationV5(db);
       }
     };
 
