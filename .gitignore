@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+
+# Editores
+.idea/
+
+# Datos de prueba locales que no deben commitearse por accidente
+tests/**/*.local.json
+
+# Configuración local de Firebase (no secreta, pero específica de cada proyecto)
+src/infrastructure/firebase/firebase-config.js

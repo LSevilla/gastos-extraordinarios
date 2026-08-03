@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es-CL">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aporte Compartido</title>
+    <meta
+      name="description"
+      content="Aplicación privada y segura para la administración compartida de gastos extraordinarios de hijos."
+    />
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#1e5aa8" />
+    <link rel="stylesheet" href="./css/base.css" />
+    <link rel="stylesheet" href="./css/components.css" />
+  </head>
+  <body>
+    <div id="app" role="main" aria-live="polite"></div>
+
+    <!-- Módulos ES nativos, sin build step (ADR-002). El navegador ejecuta
+         exactamente este archivo, sin transformación previa. -->
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

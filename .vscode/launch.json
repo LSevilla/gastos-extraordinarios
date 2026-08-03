@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Abrir app (dev server)",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "npm: dev"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Depurar pruebas unitarias",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test", "tests/unit"],
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Depurar pruebas de integración",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test", "tests/integration"],
+      "console": "integratedTerminal"
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+rules_version = '2';
+
+// firestore.rules — Build 1.3b
+//
+// Principio rector, sin excepciones: DENEGAR POR DEFECTO. Cada colección
+// declara explícitamente quién puede leer/escribir; cualquier acceso no
+// contemplado queda bloqueado por la regla de cierre al final del archivo.
+//
+// El aislamiento entre casos se resuelve consultando `caseMemberships`
+// dentro de la propia regla — nunca confiando en un campo que el cliente
+// pueda enviar sin verificar (por ejemplo, nunca confiar en un `caseId`
+// del payload sin comprobar que quien escribe tiene membresía activa en
+// ESE caso específico).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Helpers ----
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function activeMembership(caseId) {
+      return exists(/databases/$(database)/documents/caseMemberships/$(
+        getMembershipId(caseId, request.auth.uid)
+      ));
+    }
+
+    function getMembershipId(caseId, userId) {
+      // El id del documento de membresía no es libre — se exige que el
+      // cliente lo nombre como `${caseId}_${userId}` para poder resolverlo
+      // en una regla sin una consulta adicional.
+      return caseId + '_' + userId;
+    }
+
+    function membershipData(caseId) {
+      return get(/databases/$(database)/documents/caseMemberships/$(
+        getMembershipId(caseId, request.auth.uid)
+      )).data;
+    }
+
+    function hasRole(caseId, roles) {
+      return isSignedIn()
+        && activeMembership(caseId)
+        && membershipData(caseId).status == 'active'
+        && membershipData(caseId).role in roles;
+    }
+
+    function canRead(caseId) {
+      return hasRole(caseId, ['owner', 'editor', 'viewer']);
+    }
+
+    function canWrite(caseId) {
+      return hasRole(caseId, ['owner', 'editor']);
+    }
+
+    function canManageMembers(caseId) {
+      return hasRole(caseId, ['owner']);
+    }
+
+    // ---- Casos ----
+
+    match /cases/{caseId} {
+      allow read: if canRead(caseId);
+      allow write: if canWrite(caseId);
+    }
+
+    // ---- Membresías ----
+    // El id del documento es "{caseId}_{userId}" — permite resolver
+    // pertenencia sin una consulta adicional en las reglas de arriba.
+
+    function isOwnerRole(data) {
+      return data.role == 'owner';
+    }
+
+    // Modelo de owner único (Build 1.3b — ver docs/adr-018-single-owner-model.md):
+    // mientras no exista un caso de uso de transferencia de propiedad, una
+    // membresía owner no puede alterarse mediante una escritura normal —
+    // es la política vigente del modelo actual, no una imposibilidad
+    // estructural. El día que exista `TransferOwnership`, esta función es
+    // el único lugar que habrá que revisar junto con esa implementación.
+    function preservesOwnerUnderCurrentModel(existing, incoming) {
+      return !isOwnerRole(existing) || (isOwnerRole(incoming) && incoming.status == existing.status);
+    }
+
+    match /caseMemberships/{membershipId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || canManageMembers(resource.data.caseId));
+      allow create: if isSignedIn()
+        && canManageMembers(request.resource.data.caseId)
+        && !isOwnerRole(request.resource.data);
+      // Nunca se permite que alguien se autoasigne una membresía propia —
+      // toda membresía nace de aceptar una invitación, gestionada por
+      // MembershipService, nunca escrita directo desde el cliente salvo
+      // por quien ya es owner del caso. Tampoco se permite crear una
+      // membresía owner por esta vía — el owner nace únicamente al
+      // crear el caso (bootstrapOwnerMembership), nunca por invitación.
+      allow update: if isSignedIn()
+        && canManageMembers(resource.data.caseId)
+        && preservesOwnerUnderCurrentModel(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    // ---- Gastos ----
+    // Build 1.4: expenses/{expenseId} como colección superior, con caseId
+    // como campo (decisión D.3, aprobada — mismo criterio que
+    // caseMemberships). Campos inmutables protegidos con
+    // diff().affectedKeys(): id (implícito, nunca se reescribe el
+    // documento con otro id), caseId, createdAt, createdByUserId.
+
+    function immutableExpenseFieldsUnchanged() {
+      let protectedKeys = ['caseId', 'createdAt', 'createdByUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys) == false;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn()
+        && canWrite(request.resource.data.caseId)
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && immutableExpenseFieldsUnchanged()
+        && request.resource.data.updatedByUserId == request.auth.uid;
+      // Nunca eliminación física — la anulación es una actualización que
+      // establece deletedAt/cancelledByUserId/cancellationReason, nunca un
+      // delete real (informe del Build 1.4, sección 9).
+      allow delete: if false;
+    }
+
+    // ---- Invitaciones ----
+
+    match /invitations/{invitationId} {
+      allow create: if isSignedIn() && canManageMembers(request.resource.data.caseId);
+      // Leer una invitación puntual (para aceptarla) no exige membresía —
+      // la validación real de identidad ocurre en MembershipService
+      // (coincidencia de correo + hash del token); esta regla solo evita
+      // listar invitaciones ajenas por fuerza bruta.
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow update: if isSignedIn()
+        && (canManageMembers(resource.data.caseId) || resource.data.email == request.auth.token.email);
+      allow delete: if false;
+    }
+
+    // ---- Cierre: todo lo no contemplado explícitamente queda denegado ----
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

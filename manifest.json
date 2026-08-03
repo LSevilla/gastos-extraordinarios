@@ -1,0 +1,25 @@
+{
+  "name": "Aporte Compartido",
+  "short_name": "Aporte Comp.",
+  "description": "Aplicación privada y segura para la administración compartida de gastos extraordinarios de hijos.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#1e5aa8",
+  "lang": "es-CL",
+  "icons": [
+    {
+      "src": "./public/assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./public/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

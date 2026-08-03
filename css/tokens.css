@@ -1,0 +1,91 @@
+/* css/tokens.css
+ * Sistema de diseño base — Turno 2 (Propuesta UX/UI), sección E.
+ * Solo variables. Ningún componente se define ni se estiliza aquí.
+ */
+
+:root {
+  /* ---- Color ---- */
+  --color-primario: #1e5aa8;
+  --color-primario-oscuro: #153b63;
+  --color-fondo: #f5f7fa;
+  --color-superficie: #ffffff;
+  --color-texto: #1f2937;
+  --color-texto-secundario: #667085;
+  --color-borde: #d8dee8;
+
+  --color-exito: #27875b;
+  --color-advertencia: #b7791f;
+  --color-observacion: #c65d21;
+  --color-solicitud-antecedentes: #6941c6;
+  --color-error: #c2413b;
+  --color-informacion: #1e5aa8;
+  --color-cerrado: #475467;
+  --color-borrador: #98a2b3;
+  --color-anulado: #667085;
+
+  /* ---- Tipografía ---- */
+  --font-family-base: Inter, 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-size-h1: 24px;
+  --font-size-h2: 18px;
+  --font-size-normal: 14px;
+  --font-size-auxiliar: 12px;
+  --font-size-etiqueta: 12px;
+  --font-size-valor-destacado: 28px;
+  --font-size-valor-tabla: 14px;
+  --font-weight-h1: 600;
+  --font-weight-h2: 600;
+  --font-weight-normal: 400;
+  --font-weight-etiqueta: 500;
+  --font-weight-valor-destacado: 600;
+
+  /* ---- Espaciado (escala de 8px, con 4px como ajuste fino) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ---- Bordes y radios ---- */
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-modal: 16px;
+  --radius-dropdown: 8px;
+  --radius-badge: 999px;
+  --border-width: 1px;
+
+  /* ---- Sombras (3 niveles de elevación) ---- */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-dropdown: 0 8px 16px rgba(16, 24, 40, 0.1);
+  --shadow-modal: 0 20px 24px rgba(16, 24, 40, 0.12);
+  --overlay-modal: rgba(16, 24, 40, 0.45);
+
+  /* ---- Íconos ---- */
+  --icon-size-default: 20px;
+  --icon-size-nav: 24px;
+  --icon-stroke-width: 1.75px;
+
+  /* ---- Layout ---- */
+  --sidebar-width-expanded: 256px;
+  --sidebar-width-collapsed: 72px;
+  --header-height-desktop: 64px;
+  --header-height-mobile: 56px;
+  --bottom-nav-height: 64px;
+  --content-max-width: 1120px;
+  --touch-target-min: 44px;
+}
+
+/* Respeto a preferencia de movimiento reducido — aplica a cualquier transición que
+   los componentes definan más adelante; no hay componentes aquí, solo el compromiso
+   de que ninguno debe animar si esta media query está activa. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration: 0ms;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    --motion-duration: 150ms;
+  }
+}
