@@ -3,10 +3,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ACTIONS } from '../../src/presentation/views/home-view.js';
 
-test('existen exactamente las 6 acciones pedidas, en el orden pedido', () => {
+// La especificación original definía 6 acciones. "Ver mis gastos" es una
+// séptima, agregada deliberadamente: hasta ahora no existía ninguna entrada
+// directa a la lista de gastos — se llegaba de rebote desde "Adjuntar un
+// comprobante", cuyo nombre no anuncia esa función. Va primera porque
+// consultar es la operación más frecuente.
+test('existen exactamente las 7 acciones definidas, en el orden definido', () => {
   assert.deepEqual(
     ACTIONS.map((a) => a.label),
     [
+      'Ver mis gastos',
       'Registrar un gasto',
       'Registrar un reembolso',
       'Registrar un pago',
@@ -17,9 +23,12 @@ test('existen exactamente las 6 acciones pedidas, en el orden pedido', () => {
   );
 });
 
-test('"Registrar un gasto", "Adjuntar un comprobante" y "Administrar el caso" están habilitadas en este Build', () => {
+test('las acciones habilitadas son las cinco con función real; pagos y estado de cuenta siguen pendientes', () => {
   const enabled = ACTIONS.filter((a) => a.enabled).map((a) => a.id);
-  assert.deepEqual(enabled.sort(), ['document', 'expense', 'manageCase', 'reimbursement'].sort());
+  assert.deepEqual(
+    enabled.sort(),
+    ['document', 'expense', 'expensesList', 'manageCase', 'reimbursement'].sort(),
+  );
 });
 
 test('cada acción tiene un ícono del catálogo y un texto de ayuda no vacío', () => {
@@ -31,6 +40,7 @@ test('cada acción tiene un ícono del catálogo y un texto de ayuda no vacío',
 
 test('los textos de ayuda coinciden exactamente con los definidos en la especificación del Build', () => {
   const help = Object.fromEntries(ACTIONS.map((a) => [a.id, a.help]));
+  assert.equal(help.expensesList, 'Revisa todos los gastos registrados, su estado y su respaldo.');
   assert.equal(help.expense, 'Incorpora un gasto extraordinario y sus respaldos.');
   assert.equal(
     help.reimbursement,

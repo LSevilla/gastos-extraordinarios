@@ -434,3 +434,154 @@ button:focus-visible,
   border-top: var(--border-width) solid var(--color-borde);
   margin-top: var(--space-2);
 }
+
+/* ---- Ventanas (modal) ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  padding: 0;
+}
+/* Móvil primero: la ventana sube desde abajo y ocupa el ancho completo,
+   que es donde el pulgar alcanza. En pantallas grandes pasa a ser un
+   cuadro centrado. */
+.modal {
+  background: var(--color-superficie, #fff);
+  border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+  box-shadow: var(--shadow-modal);
+  width: 100%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: var(--border-width) solid var(--color-borde);
+  flex-shrink: 0;
+}
+.modal-title {
+  font-size: var(--font-size-titulo-seccion, 1.0625rem);
+  font-weight: 600;
+  color: var(--color-texto);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--color-texto-secundario);
+  cursor: pointer;
+  padding: 0;
+  /* 44px: objetivo táctil mínimo, no se reduce aunque el glifo sea chico. */
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.modal-close:hover {
+  color: var(--color-texto);
+}
+.modal-body {
+  padding: var(--space-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.modal-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.modal-actions .btn {
+  flex: 1 1 auto;
+}
+body.has-modal-open {
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: var(--space-6);
+  }
+  .modal {
+    border-radius: var(--radius-modal);
+    max-width: 480px;
+    max-height: 85vh;
+  }
+  .modal-wide {
+    max-width: 760px;
+  }
+  .modal-actions .btn {
+    flex: 0 0 auto;
+  }
+}
+
+/* ---- Visor de comprobantes ---- */
+.document-viewer-frame {
+  display: flex;
+  justify-content: center;
+  background: var(--color-fondo, #f7f8fa);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.document-viewer-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.document-viewer-pdf {
+  width: 100%;
+  height: 60vh;
+  border: none;
+}
+
+/* ---- Fila de resumen del monto neto ---- */
+.net-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: baseline;
+}
+.net-row.is-total {
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--color-borde);
+  font-weight: 600;
+}
+.net-row .net-label {
+  color: var(--color-texto-secundario);
+}
+.net-row.is-total .net-label {
+  color: var(--color-texto);
+}
+
+/* ---- Botón con apariencia de enlace ----
+   Para acciones que abren contenido en vez de enviar datos (por ejemplo, el
+   nombre de un comprobante que abre el visor). Es un <button> de verdad, no
+   un <a href="#">: no navega, así que no debe anunciarse como enlace. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-primario, #2563eb);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.link-button:hover {
+  text-decoration: none;
+}

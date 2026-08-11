@@ -2,6 +2,66 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.7] — Build 1.6: Reconstrucción de la capa de interfaz
+
+Trabajo exclusivamente de presentación: no toca dominio, aplicación ni
+infraestructura. Las 411 pruebas existentes siguen siendo el piso.
+
+Este paquete reconstruye mejoras de interfaz que se habían implementado antes
+del Build 1.5, se perdieron con el entorno de aquella sesión y nunca llegaron
+al repositorio.
+
+### Agregado
+
+- **Componente de ventana reutilizable** (`components/modal.js`): `role="dialog"`,
+  `aria-modal`, foco atrapado dentro mientras está abierta, retorno del foco al
+  botón que la abrió, cierre con Escape y con clic en el fondo, y bloqueo del
+  scroll de la página de atrás. Incluye `confirmInModal()` para confirmaciones
+  de una sola pregunta. No usa `<dialog>` nativo: su comportamiento de foco
+  todavía varía entre navegadores móviles y el proyecto no lleva polyfills.
+- **Visor de comprobantes** (`components/document-viewer.js`): muestra
+  imágenes y PDF desde el Blob guardado en IndexedDB, con opción de abrir en
+  pestaña nueva y descargar. La URL temporal se revoca siempre al cerrar.
+- **Acción "Ver mis gastos"** en el menú principal, primera de la lista.
+- **Beneficiarios como vista propia** (`views/beneficiaries-view.js`), con su
+  ruta en `app.js`. Alta y edición en ventana; desactivación con confirmación
+  explícita.
+- Estilos de ventana, visor, filas de monto neto y botón con apariencia de
+  enlace en `css/components.css`, sobre los tokens `--radius-modal` y
+  `--shadow-modal` que ya existían sin uso.
+
+### Corregido
+
+- **Los comprobantes no se podían abrir.** Se listaban por nombre de archivo y
+  se podían adjuntar y quitar, pero no ver — el respaldo de un gasto quedaba en
+  algo que había que creer de palabra. Ahora el nombre abre el visor.
+
+### Cambiado
+
+- **`expense-detail-view.js` pasa a ser una pantalla resumen.** Antes tenía
+  desplegados a la vez, en línea, los formularios de edición, anulación,
+  adjuntar comprobante y registrar reembolso, aunque en la mayoría de las
+  visitas no se usara ninguno; en un teléfono eran varias pantallas de
+  deslizamiento solo para leer un monto. Ahora la página muestra solo
+  información y cada acción abre una ventana.
+- El monto neto se presenta en filas etiqueta/valor, no en párrafos sueltos.
+- **"Administrar el caso" ya no contiene la administración de beneficiarios**:
+  queda el acceso con el recuento de activos.
+- La validación de archivos adjuntos se unificó en un solo lugar dentro de la
+  vista de detalle: el formulario de reembolso y el de comprobante repetían la
+  misma regla con mensajes distintos.
+- `eslint.config.js`: se declara el global `URL`, necesario para el visor.
+- `tests/component/home-actions.test.js`: la especificación original definía 6
+  acciones de menú; ahora son 7 por la incorporación de "Ver mis gastos".
+
+### Limitación conocida, declarada
+
+- **Ninguno de estos cinco componentes tiene pruebas automatizadas.** El
+  proyecto no tiene entorno DOM en las pruebas (no hay jsdom ni equivalente) y
+  agregar uno es una decisión de dependencias que no corresponde tomar dentro
+  de un trabajo de interfaz. La capa de presentación ya estaba sin cobertura
+  antes de este Build; esto no la empeora, pero la hace más visible.
+
 ## [0.4.0-alpha.6] — Build 1.5: Registrar un reembolso y monto neto por gasto
 
 Un reembolso siempre está vinculado a un gasto existente: no existe el

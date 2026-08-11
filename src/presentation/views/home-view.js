@@ -5,6 +5,17 @@ import { showToast } from '../components/toast.js';
 
 export const ACTIONS = [
   {
+    // Primera de la lista a propósito: consultar es lo que más se hace, y
+    // hasta ahora no existía ninguna entrada directa a la lista de gastos —
+    // se llegaba de rebote desde "Adjuntar un comprobante", que no dice lo
+    // que hace.
+    id: 'expensesList',
+    label: 'Ver mis gastos',
+    icon: 'expensesList',
+    help: 'Revisa todos los gastos registrados, su estado y su respaldo.',
+    enabled: true,
+  },
+  {
     id: 'expense',
     label: 'Registrar un gasto',
     icon: 'expense',

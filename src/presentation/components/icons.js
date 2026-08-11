@@ -25,6 +25,12 @@ export const icons = {
   manageCase: wrap(
     '<circle cx="12" cy="8" r="3"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/><path d="M19 4l1.5 1.5L23 3"/>',
   ),
+  expensesList: wrap(
+    '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/><circle cx="18" cy="18" r="2.5"/>',
+  ),
+  beneficiaries: wrap(
+    '<circle cx="9" cy="9" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3 3 0 0 1 0 6"/><path d="M18 14.5c2 .9 3 2.6 3 5.5"/>',
+  ),
   info: wrap('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
   chevronLeft: wrap('<path d="M15 6l-6 6 6 6"/>'),
   chevronRight: wrap('<path d="M9 6l6 6-6 6"/>'),

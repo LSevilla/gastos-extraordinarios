@@ -47,6 +47,7 @@ import { Clock } from './shared/clock.js';
 import { renderOnboarding } from './presentation/views/onboarding-view.js';
 import { renderHome } from './presentation/views/home-view.js';
 import { renderManageCase } from './presentation/views/manage-case-view.js';
+import { renderBeneficiaries } from './presentation/views/beneficiaries-view.js';
 import { renderRegisterExpense } from './presentation/views/register-expense-view.js';
 import { renderExpensesList } from './presentation/views/expenses-list-view.js';
 import { renderExpenseDetail } from './presentation/views/expense-detail-view.js';
@@ -233,6 +234,14 @@ async function main() {
         caseId: summary.caseEntity.id.toString(),
         currentUserId: currentUserProfile.id,
         onBack: () => navigate('home'),
+        onManageBeneficiaries: () => navigate('beneficiaries'),
+      });
+    } else if (view === 'beneficiaries') {
+      await renderBeneficiaries(root, {
+        beneficiaryService,
+        caseEntity: summary.caseEntity,
+        canWrite: canWriteExpenses,
+        onBack: () => navigate('manageCase'),
       });
     } else if (view === 'registerExpense') {
       renderRegisterExpense(root, {
@@ -278,6 +287,7 @@ async function main() {
         beneficiariesCount: beneficiaries.length,
         onNavigate: (actionId) => {
           if (actionId === 'manageCase') navigate('manageCase');
+          else if (actionId === 'expensesList') navigate('expensesList');
           else if (actionId === 'expense') {
             if (canWriteExpenses) navigate('registerExpense');
             else showToast('No tienes permiso para registrar gastos en este caso.');

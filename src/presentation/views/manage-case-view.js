@@ -6,7 +6,6 @@
 import { PercentagePeriod } from '../../domain/participants/percentage-period.js';
 import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js';
 import { showToast } from '../components/toast.js';
-import { icon } from '../components/icons.js';
 import { createBreadcrumb } from '../components/breadcrumb.js';
 
 /**
@@ -21,9 +20,6 @@ import { createBreadcrumb } from '../components/breadcrumb.js';
  * }} deps
  */
 export function renderManageCase(root, deps) {
-  let pendingDeactivation = null; // id de beneficiario en confirmación
-  let pendingEdit = null; // id de beneficiario en edición
-
   render();
 
   async function render() {
@@ -213,6 +209,11 @@ export function renderManageCase(root, deps) {
     return card;
   }
 
+  /**
+   * Beneficiarios dejó de vivir dentro de esta pantalla: ahora es una vista
+   * propia. Acá queda solo el acceso, con el recuento, para que "Administrar
+   * el caso" no siga siendo una página que lo contiene todo.
+   */
   function renderBeneficiariesCard(beneficiaries) {
     const card = document.createElement('div');
     card.className = 'card stack';
@@ -222,193 +223,22 @@ export function renderManageCase(root, deps) {
     const title = document.createElement('h2');
     title.className = 'section-title';
     title.textContent = 'Beneficiarios';
-    card.append(eyebrow, title);
 
-    const list = document.createElement('div');
-    list.className = 'stack-tight';
-    beneficiaries.forEach((beneficiary) => {
-      const row = document.createElement('div');
-      row.className = `beneficiary-row${beneficiary.isActive ? '' : ' is-inactive'}`;
+    const summary = document.createElement('p');
+    summary.className = 'muted-text';
+    const activeCount = beneficiaries.filter((beneficiary) => beneficiary.isActive).length;
+    summary.textContent =
+      beneficiaries.length === 0
+        ? 'Todavía no hay beneficiarios en este caso.'
+        : `${activeCount} activo${activeCount === 1 ? '' : 's'} de ${beneficiaries.length} registrado${beneficiaries.length === 1 ? '' : 's'}.`;
 
-      if (pendingEdit === beneficiary.id.toString()) {
-        const editForm = document.createElement('form');
-        editForm.noValidate = true;
-        editForm.className = 'stack-tight';
-        editForm.innerHTML = `
-          <div class="field-row">
-            <div class="field">
-              <label for="edit-b-first-${beneficiary.id.toString()}">Nombre</label>
-              <input id="edit-b-first-${beneficiary.id.toString()}" data-field="firstName" type="text" value="${escapeAttr(beneficiary.firstName)}" />
-            </div>
-            <div class="field">
-              <label for="edit-b-last-${beneficiary.id.toString()}">Apellido</label>
-              <input id="edit-b-last-${beneficiary.id.toString()}" data-field="lastName" type="text" value="${escapeAttr(beneficiary.lastName)}" />
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="edit-b-birth-${beneficiary.id.toString()}">Fecha de nacimiento (opcional)</label>
-              <input id="edit-b-birth-${beneficiary.id.toString()}" data-field="birthDate" type="date" value="${beneficiary.birthDate ? beneficiary.birthDate.toISOString().slice(0, 10) : ''}" />
-            </div>
-            <div class="field">
-              <label for="edit-b-notes-${beneficiary.id.toString()}">Relación o nota (opcional)</label>
-              <input id="edit-b-notes-${beneficiary.id.toString()}" data-field="notes" type="text" placeholder="Ej: Hijo mayor, enseñanza media" value="${escapeAttr(beneficiary.notes)}" />
-            </div>
-          </div>
-          <div class="field-row">
-            <button type="submit" class="btn btn-primary">Guardar cambios</button>
-            <button type="button" class="btn btn-secondary" id="cancel-edit-${beneficiary.id.toString()}">Cancelar</button>
-          </div>
-        `;
-        editForm.addEventListener('submit', async (event) => {
-          event.preventDefault();
-          clearFieldErrors(editForm);
-          const birthDateValue = editForm.querySelector(
-            `#edit-b-birth-${beneficiary.id.toString()}`,
-          ).value;
-          const result = await deps.beneficiaryService.updateBeneficiary(beneficiary.id, {
-            firstName: editForm.querySelector(`#edit-b-first-${beneficiary.id.toString()}`).value,
-            lastName: editForm.querySelector(`#edit-b-last-${beneficiary.id.toString()}`).value,
-            birthDate: birthDateValue ? new Date(birthDateValue) : null,
-            notes: editForm.querySelector(`#edit-b-notes-${beneficiary.id.toString()}`).value,
-          });
-          if (result.isFailure()) {
-            applyFieldErrors(editForm, result.getError());
-            return;
-          }
-          pendingEdit = null;
-          showToast('Beneficiario actualizado.');
-          render();
-        });
-        editForm
-          .querySelector(`#cancel-edit-${beneficiary.id.toString()}`)
-          .addEventListener('click', () => {
-            pendingEdit = null;
-            render();
-          });
-        row.appendChild(editForm);
-      } else if (pendingDeactivation === beneficiary.id.toString()) {
-        row.innerHTML = `
-          <span class="body-text">¿Desactivar a ${escapeHtml(beneficiary.getFullName())}? Podrás volver a activarlo cuando quieras.</span>
-        `;
-        const confirmButton = document.createElement('button');
-        confirmButton.type = 'button';
-        confirmButton.className = 'btn btn-secondary';
-        confirmButton.textContent = 'Sí, desactivar';
-        confirmButton.addEventListener('click', async () => {
-          const result = await deps.beneficiaryService.deactivateBeneficiary(beneficiary.id);
-          pendingDeactivation = null;
-          if (result.isFailure()) {
-            showToast('No se pudo desactivar. Intenta de nuevo.');
-            return;
-          }
-          showToast('Beneficiario desactivado.');
-          render();
-        });
-        const cancelButton = document.createElement('button');
-        cancelButton.type = 'button';
-        cancelButton.className = 'btn btn-secondary';
-        cancelButton.textContent = 'Cancelar';
-        cancelButton.addEventListener('click', () => {
-          pendingDeactivation = null;
-          render();
-        });
-        row.appendChild(confirmButton);
-        row.appendChild(cancelButton);
-      } else {
-        const label = document.createElement('span');
-        label.className = 'body-text';
-        label.textContent = beneficiary.getFullName();
-        row.appendChild(label);
+    const goButton = document.createElement('button');
+    goButton.type = 'button';
+    goButton.className = 'btn btn-secondary btn-block';
+    goButton.textContent = 'Administrar beneficiarios';
+    goButton.addEventListener('click', () => deps.onManageBeneficiaries());
 
-        if (!beneficiary.isActive) {
-          const badge = document.createElement('span');
-          badge.className = 'badge-inactive';
-          badge.textContent = 'Inactivo. Puedes volver a activarlo.';
-          row.appendChild(badge);
-        }
-
-        const editButton = document.createElement('button');
-        editButton.type = 'button';
-        editButton.className = 'btn btn-secondary';
-        editButton.textContent = 'Editar';
-        editButton.addEventListener('click', () => {
-          pendingEdit = beneficiary.id.toString();
-          render();
-        });
-        row.appendChild(editButton);
-
-        const actionButton = document.createElement('button');
-        actionButton.type = 'button';
-        actionButton.className = 'btn btn-secondary';
-        actionButton.textContent = beneficiary.isActive ? 'Desactivar' : 'Activar';
-        actionButton.addEventListener('click', async () => {
-          if (beneficiary.isActive) {
-            pendingDeactivation = beneficiary.id.toString();
-            render();
-          } else {
-            const result = await deps.beneficiaryService.reactivateBeneficiary(beneficiary.id);
-            if (result.isFailure()) {
-              showToast('No se pudo activar. Intenta de nuevo.');
-              return;
-            }
-            showToast('Beneficiario activado.');
-            render();
-          }
-        });
-        row.appendChild(actionButton);
-      }
-      list.appendChild(row);
-    });
-    card.appendChild(list);
-
-    const addForm = document.createElement('form');
-    addForm.className = 'stack';
-    addForm.noValidate = true;
-    addForm.innerHTML = `
-      <p class="body-text" style="font-weight:600;margin-top:8px;">Agregar beneficiario</p>
-      <div class="field-row">
-        <div class="field">
-          <label for="new-b-first">Nombre</label>
-          <input id="new-b-first" data-field="firstName" type="text" />
-        </div>
-        <div class="field">
-          <label for="new-b-last">Apellido</label>
-          <input id="new-b-last" data-field="lastName" type="text" />
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="new-b-birth">Fecha de nacimiento (opcional)</label>
-          <input id="new-b-birth" data-field="birthDate" type="date" />
-        </div>
-        <div class="field">
-          <label for="new-b-notes">Relación o nota (opcional)</label>
-          <input id="new-b-notes" data-field="notes" type="text" placeholder="Ej: Hijo mayor, enseñanza media" />
-        </div>
-      </div>
-      <button type="submit" class="btn btn-primary">${icon('plus')} Agregar beneficiario</button>
-    `;
-    addForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const input = {
-        firstName: addForm.querySelector('#new-b-first').value,
-        lastName: addForm.querySelector('#new-b-last').value,
-        birthDate: addForm.querySelector('#new-b-birth').value
-          ? new Date(addForm.querySelector('#new-b-birth').value)
-          : null,
-        notes: addForm.querySelector('#new-b-notes').value,
-      };
-      const result = await deps.beneficiaryService.addBeneficiary(deps.caseEntity.id, input);
-      if (result.isFailure()) {
-        applyFieldErrors(addForm, result.getError());
-        return;
-      }
-      clearFieldErrors(addForm);
-      showToast('Beneficiario agregado.');
-      render();
-    });
-    card.appendChild(addForm);
+    card.append(eyebrow, title, summary, goButton);
     return card;
   }
 }

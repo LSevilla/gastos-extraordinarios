@@ -83,6 +83,9 @@ export default [
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         URLSearchParams: 'readonly',
+        // URL: necesario para createObjectURL/revokeObjectURL en el visor
+        // de comprobantes, que muestra archivos guardados en IndexedDB.
+        URL: 'readonly',
         TextEncoder: 'readonly',
       },
     },
