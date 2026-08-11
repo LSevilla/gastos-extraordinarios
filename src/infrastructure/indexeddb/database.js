@@ -5,7 +5,7 @@
 // beneficiaries, appSettings. v2 (Build 1.2): agrega expenses, documents,
 // documentBlobs — migración aditiva, no toca ningún store existente.
 export const DATABASE_NAME = 'gastos-extraordinarios-db';
-export const DATABASE_VERSION = 5;
+export const DATABASE_VERSION = 6;
 
 export const STORE_NAMES = Object.freeze({
   CASES: 'cases',
@@ -21,6 +21,7 @@ export const STORE_NAMES = Object.freeze({
   CASE_MEMBERSHIPS: 'caseMemberships',
   INVITATIONS: 'invitations',
   REIMBURSEMENTS: 'reimbursements',
+  SETTLEMENTS: 'settlements',
 });
 
 /**
@@ -113,6 +114,19 @@ export function runMigrationV5(db) {
 }
 
 /**
+ * Build 1.7 — liquidaciones. Aditiva otra vez: un store nuevo y ningún
+ * cambio a los existentes. El marcador `settlementId` que el Build 1.7
+ * agrega a los gastos NO necesita migración: es un campo más dentro del
+ * registro, y un gasto antiguo que no lo tenga se lee como no liquidado.
+ * @param {IDBDatabase} db
+ */
+export function runMigrationV6(db) {
+  const settlements = db.createObjectStore(STORE_NAMES.SETTLEMENTS, { keyPath: 'id' });
+  settlements.createIndex('caseId', 'caseId');
+  settlements.createIndex('settledAt', 'settledAt');
+}
+
+/**
  * Abre (y si corresponde, crea/migra) la base de datos. Usa el `indexedDB`
  * global — en el navegador es el nativo; en pruebas, `fake-indexeddb` lo
  * reemplaza antes de importar este módulo (Development Handbook, Capítulo 9).
@@ -139,6 +153,9 @@ export function openDatabase(databaseName = DATABASE_NAME) {
       }
       if (event.oldVersion < 5) {
         runMigrationV5(db);
+      }
+      if (event.oldVersion < 6) {
+        runMigrationV6(db);
       }
     };
 

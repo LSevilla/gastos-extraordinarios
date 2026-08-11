@@ -16,6 +16,7 @@ import { Identifier } from '../../shared/identifier.js';
 const CASES_COLLECTION = 'cases';
 const EXPENSES_COLLECTION = 'expenses';
 const REIMBURSEMENTS_COLLECTION = 'reimbursements';
+const SETTLEMENTS_COLLECTION = 'settlements';
 
 export class SyncEngine {
   /**
@@ -24,6 +25,7 @@ export class SyncEngine {
    *   caseRepo: import('../../domain/cases/case-repository.js').CaseRepository,
    *   expenseRepo?: import('../../domain/expenses/expense-repository.js').ExpenseRepository,
    *   reimbursementRepo?: import('../../domain/reimbursements/reimbursement-repository.js').ReimbursementRepository,
+   *   settlementRepo?: import('../../domain/settlements/settlement-repository.js').SettlementRepository,
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
@@ -86,6 +88,19 @@ export class SyncEngine {
   }
 
   /**
+   * @param {Identifier} settlementId
+   * @returns {Promise<void>}
+   */
+  async enqueueSettlementSync(settlementId) {
+    const entry = OperationQueueEntry.create(
+      'sync:settlement',
+      { settlementId: settlementId.toString() },
+      this.deps.clock,
+    );
+    await this.deps.operationQueueRepo.save(entry);
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.
@@ -121,6 +136,16 @@ export class SyncEngine {
             findById: (id) => this.deps.reimbursementRepo.findById(id),
             push: (entity) => this.#pushReimbursementToFirestore(entity),
             logLabel: 'sync:reimbursement',
+          },
+        );
+      } else if (entry.type === 'sync:settlement') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.settlementId).getValue(),
+          {
+            findById: (id) => this.deps.settlementRepo.findById(id),
+            push: (entity) => this.#pushSettlementToFirestore(entity),
+            logLabel: 'sync:settlement',
           },
         );
       }
@@ -199,6 +224,9 @@ export class SyncEngine {
       updatedByUserId: expense.updatedByUserId,
       cancelledByUserId: expense.cancelledByUserId,
       cancellationReason: expense.cancellationReason,
+      // Build 1.7: la marca de liquidación viaja con el gasto; si no, el
+      // otro participante podría volver a liquidar lo ya liquidado.
+      settlementId: expense.settlementId ? expense.settlementId.toString() : null,
     });
   }
 
@@ -225,6 +253,37 @@ export class SyncEngine {
       updatedByUserId: reimbursement.updatedByUserId,
       cancelledByUserId: reimbursement.cancelledByUserId,
       cancellationReason: reimbursement.cancellationReason,
+    });
+  }
+
+  /**
+   * @param {import('../../domain/settlements/settlement.js').Settlement} settlement
+   */
+  async #pushSettlementToFirestore(settlement) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const ref = fs.doc(firestore, SETTLEMENTS_COLLECTION, settlement.id.toString());
+    await fs.setDoc(ref, {
+      caseId: settlement.caseId.toString(),
+      periodStart: settlement.periodStart.toISOString(),
+      periodEnd: settlement.periodEnd.toISOString(),
+      expenseIds: settlement.expenseIds.map((id) => id.toString()),
+      totalNet: settlement.totalNet.getAmount(),
+      shareA: settlement.shareA.getAmount(),
+      shareB: settlement.shareB.getAmount(),
+      currency: settlement.totalNet.getCurrency(),
+      debtorParticipantId: settlement.debtorParticipantId
+        ? settlement.debtorParticipantId.toString()
+        : null,
+      creditorParticipantId: settlement.creditorParticipantId
+        ? settlement.creditorParticipantId.toString()
+        : null,
+      balanceAmount: settlement.balanceAmount.getAmount(),
+      settledAt: settlement.settledAt.toISOString(),
+      updatedAt: settlement.updatedAt.toISOString(),
+      deletedAt: settlement.deletedAt ? settlement.deletedAt.toISOString() : null,
+      settledByUserId: settlement.settledByUserId,
+      cancelledByUserId: settlement.cancelledByUserId,
+      cancellationReason: settlement.cancellationReason,
     });
   }
 

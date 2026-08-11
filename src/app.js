@@ -24,6 +24,7 @@ import { IndexedDbOperationQueueRepository } from './infrastructure/indexeddb/re
 import { IndexedDbCaseMembershipRepository } from './infrastructure/indexeddb/repositories/indexeddb-case-membership-repository.js';
 import { IndexedDbInvitationRepository } from './infrastructure/indexeddb/repositories/indexeddb-invitation-repository.js';
 import { IndexedDbReimbursementRepository } from './infrastructure/indexeddb/repositories/indexeddb-reimbursement-repository.js';
+import { IndexedDbSettlementRepository } from './infrastructure/indexeddb/repositories/indexeddb-settlement-repository.js';
 import { createFirebaseAuthProvider } from './infrastructure/firebase/firebase-auth-provider.js';
 import { getFirestoreClient } from './infrastructure/firebase/firestore-client.js';
 import { FirestoreCaseMembershipRepository } from './infrastructure/firebase/firestore-case-membership-repository.js';
@@ -32,6 +33,7 @@ import { SyncEngine } from './infrastructure/synchronization/sync-engine.js';
 import { SyncingCaseRepository } from './infrastructure/synchronization/syncing-case-repository.js';
 import { SyncingExpenseRepository } from './infrastructure/synchronization/syncing-expense-repository.js';
 import { SyncingReimbursementRepository } from './infrastructure/synchronization/syncing-reimbursement-repository.js';
+import { SyncingSettlementRepository } from './infrastructure/synchronization/syncing-settlement-repository.js';
 import { DualCaseMembershipRepository } from './infrastructure/synchronization/dual-case-membership-repository.js';
 import { DualInvitationRepository } from './infrastructure/synchronization/dual-invitation-repository.js';
 import { firebaseConfig } from './infrastructure/firebase/firebase-config.js';
@@ -41,6 +43,7 @@ import { BeneficiaryService } from './application/services/beneficiary-service.j
 import { DocumentService } from './application/services/document-service.js';
 import { ExpenseService } from './application/services/expense-service.js';
 import { ReimbursementService } from './application/services/reimbursement-service.js';
+import { AccountStatementService } from './application/services/account-statement-service.js';
 import { AuthService } from './application/services/auth-service.js';
 import { MembershipService } from './application/services/membership-service.js';
 import { Clock } from './shared/clock.js';
@@ -48,6 +51,7 @@ import { renderOnboarding } from './presentation/views/onboarding-view.js';
 import { renderHome } from './presentation/views/home-view.js';
 import { renderManageCase } from './presentation/views/manage-case-view.js';
 import { renderBeneficiaries } from './presentation/views/beneficiaries-view.js';
+import { renderAccountStatement } from './presentation/views/account-statement-view.js';
 import { renderRegisterExpense } from './presentation/views/register-expense-view.js';
 import { renderExpensesList } from './presentation/views/expenses-list-view.js';
 import { renderExpenseDetail } from './presentation/views/expense-detail-view.js';
@@ -76,6 +80,7 @@ async function main() {
   const caseMembershipLocalRepo = new IndexedDbCaseMembershipRepository(db);
   const invitationLocalRepo = new IndexedDbInvitationRepository(db);
   const rawReimbursementRepo = new IndexedDbReimbursementRepository(db);
+  const rawSettlementRepo = new IndexedDbSettlementRepository(db);
 
   // ADR-017: Firestore se inicializa una sola vez (firebase-app.js) y se
   // comparte entre AuthProvider y el motor de sincronización.
@@ -86,6 +91,7 @@ async function main() {
     caseRepo: rawCaseRepo,
     expenseRepo: rawExpenseRepo,
     reimbursementRepo: rawReimbursementRepo,
+    settlementRepo: rawSettlementRepo,
     firestore,
     firestoreModule,
     clock,
@@ -106,6 +112,12 @@ async function main() {
   // Build 1.5 — mismo decorador transparente para Reimbursement.
   const reimbursementRepo = new SyncingReimbursementRepository({
     inner: rawReimbursementRepo,
+    syncEngine,
+    operationQueueRepo,
+    clock,
+  });
+  const settlementRepo = new SyncingSettlementRepository({
+    inner: rawSettlementRepo,
     syncEngine,
     operationQueueRepo,
     clock,
@@ -141,6 +153,9 @@ async function main() {
         // Build 1.5 — permite registrar un reembolso y su comprobante en un
         // único commit, igual que ya ocurría con gasto + comprobante.
         STORE_NAMES.REIMBURSEMENTS,
+        // Build 1.7 — liquidar escribe la liquidación y todos sus gastos
+        // en un único commit: o queda todo, o no queda nada.
+        STORE_NAMES.SETTLEMENTS,
       ],
       'readwrite',
       work,
@@ -181,6 +196,17 @@ async function main() {
     membershipRepo: caseMembershipRepo,
     documentRepo,
     documentService,
+    clock,
+    runAtomicWrite,
+  });
+
+  const accountStatementService = new AccountStatementService({
+    expenseRepo,
+    reimbursementRepo,
+    percentagePeriodRepo,
+    settlementRepo,
+    participantRepo,
+    membershipRepo: caseMembershipRepo,
     clock,
     runAtomicWrite,
   });
@@ -243,6 +269,17 @@ async function main() {
         canWrite: canWriteExpenses,
         onBack: () => navigate('manageCase'),
       });
+    } else if (view === 'accountStatement') {
+      await renderAccountStatement(root, {
+        accountStatementService,
+        caseEntity: summary.caseEntity,
+        participants: summary.participants,
+        beneficiaries,
+        actorUserId: currentUserProfile.id,
+        canWrite: canWriteExpenses,
+        onSelectExpense: (expenseId) => navigate('expenseDetail', { expenseId }),
+        onBack: () => navigate('home'),
+      });
     } else if (view === 'registerExpense') {
       renderRegisterExpense(root, {
         expenseService,
@@ -288,6 +325,7 @@ async function main() {
         onNavigate: (actionId) => {
           if (actionId === 'manageCase') navigate('manageCase');
           else if (actionId === 'expensesList') navigate('expensesList');
+          else if (actionId === 'statement') navigate('accountStatement');
           else if (actionId === 'expense') {
             if (canWriteExpenses) navigate('registerExpense');
             else showToast('No tienes permiso para registrar gastos en este caso.');

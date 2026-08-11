@@ -89,6 +89,13 @@ export class Expense extends AggregateRoot {
     this.updatedByUserId = updatedByUserId;
     this.cancelledByUserId = cancelledByUserId;
     this.cancellationReason = cancellationReason;
+    // Build 1.7 — liquidación. Deliberadamente NO es un parámetro del
+    // constructor: agregarlo a una firma ya larga y posicional habría
+    // obligado a tocar todos los sitios que construyen un gasto, sin
+    // ganar nada. Se establece con markAsSettled()/clearSettlement() y se
+    // persiste aparte; un registro antiguo sin el campo se lee como null,
+    // que es exactamente "no liquidado".
+    this.settlementId = null;
   }
 
   /** @returns {boolean} */
@@ -201,6 +208,37 @@ export class Expense extends AggregateRoot {
         null,
       ),
     );
+  }
+
+  /**
+   * Un gasto liquidado ya fue incluido en un estado de cuenta cerrado, así
+   * que no puede volver a aparecer en otro: es la única garantía contra el
+   * doble cobro cuando los rangos de fechas se superponen.
+   * @returns {boolean}
+   */
+  isSettled() {
+    return this.settlementId !== null;
+  }
+
+  /**
+   * @param {Identifier} settlementId
+   * @param {import('../../shared/clock.js').Clock} clock
+   */
+  markAsSettled(settlementId, clock) {
+    this.settlementId = settlementId;
+    this.updatedAt = clock.utcNow();
+  }
+
+  /**
+   * Devuelve el gasto al conjunto de lo pendiente. Solo lo usa la anulación
+   * de una liquidación: si esa liquidación deja de valer, sus gastos tienen
+   * que volver a estar disponibles, o quedarían atrapados fuera de todo
+   * estado de cuenta futuro sin haberse cobrado nunca.
+   * @param {import('../../shared/clock.js').Clock} clock
+   */
+  clearSettlement(clock) {
+    this.settlementId = null;
+    this.updatedAt = clock.utcNow();
   }
 
   /**

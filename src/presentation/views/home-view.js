@@ -41,7 +41,7 @@ export const ACTIONS = [
     label: 'Ver estado de cuenta',
     icon: 'statement',
     help: 'Consulta los gastos, reembolsos, pagos y saldos del período.',
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'document',

@@ -23,11 +23,11 @@ test('existen exactamente las 7 acciones definidas, en el orden definido', () =>
   );
 });
 
-test('las acciones habilitadas son las cinco con función real; pagos y estado de cuenta siguen pendientes', () => {
+test('las acciones habilitadas son las seis con función real; solo pagos sigue pendiente', () => {
   const enabled = ACTIONS.filter((a) => a.enabled).map((a) => a.id);
   assert.deepEqual(
     enabled.sort(),
-    ['document', 'expense', 'expensesList', 'manageCase', 'reimbursement'].sort(),
+    ['document', 'expense', 'expensesList', 'manageCase', 'reimbursement', 'statement'].sort(),
   );
 });
 

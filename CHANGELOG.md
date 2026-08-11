@@ -2,6 +2,76 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.8] — Build 1.7: Estado de cuenta y liquidación
+
+Habilita la acción "Ver estado de cuenta". El modelo fue acordado con el
+Product Owner y conviene dejarlo escrito porque no es obvio:
+
+- **El estado de cuenta es un cálculo vivo.** Se elige un rango de fechas y
+  todo se recalcula al instante, sobre los datos actuales. No se guarda nada.
+- **El congelamiento ocurre solo al liquidar.** Ese acto guarda una foto de
+  los totales y marca cada gasto incluido.
+- **Los rangos pueden superponerse sin cobrar dos veces.** El filtro es
+  "dentro del rango Y todavía no liquidado", así que no hay que recordar qué
+  rangos se usaron antes.
+
+### Agregado
+
+- **Dominio `Settlement`**: foto congelada de un período liquidado, con sus
+  totales, el saldo resultante y la lista de gastos incluidos. Anulación
+  lógica con motivo obligatorio.
+- **`Expense.settlementId`** más `isSettled()`, `markAsSettled()` y
+  `clearSettlement()`. No es parámetro del constructor: agregarlo a una firma
+  ya larga y posicional habría obligado a tocar todos los sitios que
+  construyen un gasto sin ganar nada. Un registro previo al Build 1.7 que no
+  lo tenga se lee como no liquidado.
+- **`calculateAccountStatement()`** y **`selectSettleableExpenses()`**
+  (funciones puras): reutilizan `calculateExpenseNet()` del Build 1.5 y
+  responden una sola pregunta — quién le debe cuánto a quién. Las deudas
+  cruzadas se compensan, de modo que solo una parte queda debiendo.
+- **`AccountStatementService`**: cálculo vivo, liquidación en transacción
+  atómica (la liquidación y todos sus gastos, o nada), historial y anulación
+  que devuelve los gastos al conjunto pendiente.
+- **Migración IndexedDB v5→v6**, aditiva: store `settlements`.
+- **`sync:settlement`** con su procesador, su colección en Firestore y reglas
+  con `allow delete: if false`. El gasto ahora lleva su `settlementId` al
+  sincronizar, para que el otro participante no vuelva a liquidar lo liquidado.
+- **Pantalla de estado de cuenta**: rango de fechas, saldo en lenguaje directo
+  ("Fulana le debe $X a Mengano", nunca "participante A"), lista de gastos
+  incluidos, liquidación con confirmación explícita e historial.
+- **21 pruebas nuevas** (11 del cálculo, 10 del servicio). Total: **432**.
+
+### Corregido
+
+- **El saldo podía apuntar a la persona equivocada.** El servicio tomaba
+  "parte A" y "parte B" del orden en que el repositorio devuelve los
+  participantes, y ese orden no está garantizado: al invertirse, la aplicación
+  decía que debía quien en realidad tenía a favor. Ahora las partes se
+  resuelven desde `PercentagePeriod`, que las nombra explícitamente. Detectado
+  por una prueba que fallaba de forma intermitente.
+
+### Decisiones de producto aplicadas
+
+- Un gasto registrado tarde, con fecha dentro de un rango ya liquidado, entra
+  igual al siguiente estado de cuenta marcado como **retroactivo**. No se
+  bloquea su registro: una boleta que aparece tarde es algo que pasa de verdad.
+- Anular una liquidación devuelve sus gastos al conjunto pendiente. Si no lo
+  hiciera, quedarían fuera de todo estado de cuenta futuro, cobrados a nadie.
+- Un gasto sin tramo de porcentajes se informa y se suma al total, pero no
+  genera deuda; la pantalla lo advierte.
+
+### Fuera de alcance, declarado
+
+- **Los pagos no se descuentan todavía.** Este cálculo responde "cuánto se
+  generó de deuda", no "cuánto queda por pagar". Eso llega en el Build 1.8,
+  junto con la acción "Registrar un pago", que sigue deshabilitada.
+
+### Limitación conocida, sin cambios
+
+- La capa de presentación sigue sin pruebas automatizadas: el proyecto no tiene
+  entorno DOM en las pruebas. Las reglas de Firestore siguen sin poder
+  ejecutarse por la restricción de red del emulador.
+
 ## [0.4.0-alpha.7] — Build 1.6: Reconstrucción de la capa de interfaz
 
 Trabajo exclusivamente de presentación: no toca dominio, aplicación ni

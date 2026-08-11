@@ -176,6 +176,29 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Liquidaciones ----
+    // Build 1.7. Una liquidación es la foto congelada de un estado de cuenta.
+    // `expenseIds`, `periodStart` y `periodEnd` son inmutables: si cambiaran,
+    // la foto dejaría de corresponder a lo que las partes acordaron. Corregir
+    // se hace anulando y liquidando de nuevo, lo que deja rastro.
+
+    function immutableSettlementFieldsUnchanged() {
+      let protectedKeys = ['caseId', 'periodStart', 'periodEnd', 'expenseIds', 'settledAt', 'settledByUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys) == false;
+    }
+
+    match /settlements/{settlementId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn()
+        && canWrite(request.resource.data.caseId)
+        && request.resource.data.settledByUserId == request.auth.uid;
+      // La única actualización legítima es la anulación.
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && immutableSettlementFieldsUnchanged();
+      allow delete: if false;
+    }
+
     // ---- Invitaciones ----
 
     match /invitations/{invitationId} {

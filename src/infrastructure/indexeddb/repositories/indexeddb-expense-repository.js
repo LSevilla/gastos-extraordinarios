@@ -32,12 +32,13 @@ function toRecord(expense) {
     updatedByUserId: expense.updatedByUserId ?? null,
     cancelledByUserId: expense.cancelledByUserId ?? null,
     cancellationReason: expense.cancellationReason ?? null,
+    settlementId: expense.settlementId ? expense.settlementId.toString() : null,
   };
 }
 
 /** @param {object} record */
 function fromRecord(record) {
-  return new Expense(
+  const expense = new Expense(
     Identifier.from(record.id).getValue(),
     Identifier.from(record.caseId).getValue(),
     Identifier.from(record.beneficiaryId).getValue(),
@@ -61,6 +62,12 @@ function fromRecord(record) {
     record.cancelledByUserId ?? null,
     record.cancellationReason ?? null,
   );
+  // No es parámetro del constructor (ver nota en Expense): se restaura
+  // después. Ausente en registros previos al Build 1.7 = no liquidado.
+  expense.settlementId = record.settlementId
+    ? Identifier.from(record.settlementId).getValue()
+    : null;
+  return expense;
 }
 
 export class IndexedDbExpenseRepository extends ExpenseRepository {
