@@ -2,6 +2,45 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.9] — Documento del estado de cuenta
+
+Genera un documento imprimible y compartible del estado de cuenta, con todo
+el detalle: gastos, reembolsos, reparto por porcentajes y saldo final.
+
+Técnica: se abre una ventana nueva con un HTML autocontenido —estilos
+embebidos, sin archivos externos— y un botón que llama a `window.print()`.
+Desde ahí el navegador ofrece "Guardar como PDF". Se eligió así, y no con una
+librería generadora de PDF, porque el proyecto no lleva bundler ni
+dependencias de interfaz (ADR-012), y un HTML imprimible además se puede
+copiar, enviar o archivar sin depender de nada.
+
+### Agregado
+
+- **`components/statement-document.js`**: generador del documento. Todo dato
+  proveniente del usuario pasa por escape antes de entrar al HTML — importa
+  especialmente acá, porque el documento se escribe con `document.write()`
+  sobre una ventana nueva.
+- **Dos variantes, según lo aprobado:**
+  - **Provisional**, para un período todavía abierto. Lleva marca visible y un
+    aviso de que las cifras son las de ese momento y pueden cambiar. Sin esa
+    distinción, dos personas podrían discutir sobre dos documentos distintos
+    del mismo período — justo lo que la aplicación existe para evitar.
+  - **Definitivo**, para una liquidación ya cerrada, con su fecha de cierre.
+- **`AccountStatementService.getSettlementDetail()`**: reconstruye el detalle
+  de una liquidación cerrada. La liquidación congeló los TOTALES, no el
+  detalle línea por línea; si un gasto se editó después, la suma del detalle
+  ya no coincide. El servicio lo detecta (`hasDrift`) y el documento lo
+  advierte explícitamente en vez de mostrar dos cifras contradictorias sin
+  explicación. El monto que vale sigue siendo el liquidado.
+- **15 pruebas nuevas** (12 del generador, incluidas las de escape de HTML; 3
+  del detalle con su caso de descuadre). Total: **447**.
+
+### Nota
+
+Es la primera parte de la capa de presentación con pruebas automatizadas: el
+generador es una función pura que devuelve texto, así que se puede verificar
+sin entorno DOM. El resto de la capa sigue sin cobertura.
+
 ## [0.4.0-alpha.8] — Build 1.7: Estado de cuenta y liquidación
 
 Habilita la acción "Ver estado de cuenta". El modelo fue acordado con el

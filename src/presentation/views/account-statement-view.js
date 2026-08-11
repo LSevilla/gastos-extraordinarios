@@ -15,6 +15,10 @@ import { showToast } from '../components/toast.js';
 import { createBreadcrumb } from '../components/breadcrumb.js';
 import { openModal } from '../components/modal.js';
 import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js';
+import {
+  buildStatementDocumentHtml,
+  openStatementDocument,
+} from '../components/statement-document.js';
 
 /**
  * @param {HTMLElement} root
@@ -147,7 +151,134 @@ export async function renderAccountStatement(root, deps) {
       ${statement.retroactiveCount > 0 ? `<p class="muted-text">Hay ${statement.retroactiveCount} gasto${statement.retroactiveCount === 1 ? '' : 's'} con fecha anterior a la última liquidación. Se incluyen igual y están marcados en la lista.</p>` : ''}
       ${statement.hasUnsplittableExpenses ? '<p class="muted-text">Atención: hay gastos sin tramo de porcentajes asociado. Se suman al total, pero no pueden repartirse, así que el saldo no los considera.</p>' : ''}
     `;
+
+    const documentButton = document.createElement('button');
+    documentButton.type = 'button';
+    documentButton.className = 'btn btn-secondary btn-block';
+    documentButton.textContent = 'Generar documento para compartir';
+    documentButton.addEventListener('click', () => openProvisionalDocument(statement));
+    card.appendChild(documentButton);
+
     return card;
+  }
+
+  /**
+   * Documento de un período TODAVÍA ABIERTO. Va marcado como provisional de
+   * forma bien visible: las cifras son las de este momento y pueden cambiar.
+   * Sin esa marca, dos personas podrían terminar discutiendo sobre dos PDF
+   * distintos del mismo período, que es justo lo que la aplicación existe
+   * para evitar.
+   * @param {import('../../domain/account-statements/account-statement-calculator.js').AccountStatement} statement
+   */
+  function openProvisionalDocument(statement) {
+    const html = buildStatementDocumentHtml({
+      kind: 'provisional',
+      caseName: deps.caseEntity.name,
+      periodStart: statement.periodStart,
+      periodEnd: statement.periodEnd,
+      lines: statement.lines,
+      totalOriginal: statement.totalOriginal,
+      totalReimbursed: statement.totalReimbursed,
+      totalNet: statement.totalNet,
+      shareA: statement.shareA,
+      shareB: statement.shareB,
+      balanceAmount: statement.balanceAmount,
+      debtorName: statement.debtorParticipantId
+        ? participantName(statement.debtorParticipantId)
+        : null,
+      creditorName: statement.creditorParticipantId
+        ? participantName(statement.creditorParticipantId)
+        : null,
+      ...sharedDocumentFields(statement.lines),
+    });
+    if (!openStatementDocument(html)) {
+      showToast(
+        'Tu navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio.',
+      );
+    }
+  }
+
+  /**
+   * Los porcentajes se toman del primer gasto que tenga tramo asociado: es
+   * el tramo congelado que efectivamente se usó para repartir, no el que
+   * esté vigente hoy.
+   * @param {Array<{expense: object, net: object}>} lines
+   */
+  function sharedDocumentFields(lines) {
+    const withSplit = lines.find((line) => line.net.shareA && line.net.shareB);
+    return {
+      participantAName: withSplit
+        ? participantName(withSplit.net.shareA.participantId)
+        : (deps.participants[0]?.getFullName() ?? '—'),
+      participantBName: withSplit
+        ? participantName(withSplit.net.shareB.participantId)
+        : (deps.participants[1]?.getFullName() ?? '—'),
+      percentageA: withSplit ? withSplit.net.shareA.percentage.toNumber() : null,
+      percentageB: withSplit ? withSplit.net.shareB.percentage.toNumber() : null,
+      beneficiaryNameFor: (expense) => {
+        const beneficiary = deps.beneficiaries.find((b) => b.id.equals(expense.beneficiaryId));
+        return beneficiary ? beneficiary.getFullName() : '—';
+      },
+      participantNameFor: (participantId) => participantName(participantId),
+    };
+  }
+
+  /**
+   * Documento de una liquidación YA CERRADA. Los totales son los congelados;
+   * el detalle línea por línea se reconstruye. Si no cuadran, el servicio lo
+   * detecta y el documento lo advierte en vez de mostrar dos cifras
+   * contradictorias sin explicación.
+   * @param {import('../../domain/settlements/settlement.js').Settlement} settlement
+   */
+  async function openDefinitiveDocument(settlement) {
+    const detailResult = await deps.accountStatementService.getSettlementDetail(
+      settlement.id,
+      deps.actorUserId,
+    );
+    if (detailResult.isFailure()) {
+      showToast('No se pudo abrir el detalle de la liquidación.');
+      return;
+    }
+    const { lines, hasDrift, currentTotal } = detailResult.getValue();
+
+    const totalReimbursed = lines.reduce(
+      (total, line) => total + line.net.reimbursedAmount.getAmount(),
+      0,
+    );
+    const totalOriginal = lines.reduce(
+      (total, line) => total + line.net.originalAmount.getAmount(),
+      0,
+    );
+
+    const html = buildStatementDocumentHtml({
+      kind: 'definitivo',
+      caseName: deps.caseEntity.name,
+      periodStart: settlement.periodStart,
+      periodEnd: settlement.periodEnd,
+      lines,
+      totalOriginal: { getAmount: () => totalOriginal },
+      totalReimbursed: { getAmount: () => totalReimbursed },
+      totalNet: settlement.totalNet,
+      shareA: settlement.shareA,
+      shareB: settlement.shareB,
+      balanceAmount: settlement.balanceAmount,
+      debtorName: settlement.debtorParticipantId
+        ? participantName(settlement.debtorParticipantId)
+        : null,
+      creditorName: settlement.creditorParticipantId
+        ? participantName(settlement.creditorParticipantId)
+        : null,
+      settledAt: settlement.settledAt,
+      driftNotice: hasDrift
+        ? `Aviso: algunos gastos de esta liquidación se editaron después de cerrarla. El detalle de abajo suma ${currentTotal.getAmount().toLocaleString('es-CL')}, mientras que el total liquidado y acordado fue ${settlement.totalNet.getAmount().toLocaleString('es-CL')}. Vale el monto liquidado.`
+        : null,
+      ...sharedDocumentFields(lines),
+    });
+    if (!openStatementDocument(html)) {
+      showToast(
+        'Tu navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio.',
+      );
+    }
   }
 
   /** @param {import('../../domain/account-statements/account-statement-calculator.js').AccountStatement} statement */
@@ -293,6 +424,14 @@ export async function renderAccountStatement(root, deps) {
           ${settlement.isDeleted() ? `<br /><span class="muted-text">Motivo: ${escapeHtml(settlement.cancellationReason ?? '')}</span>` : ''}
         </span>
       `;
+      if (!settlement.isDeleted()) {
+        const documentButton = document.createElement('button');
+        documentButton.type = 'button';
+        documentButton.className = 'btn btn-secondary';
+        documentButton.textContent = 'Documento';
+        documentButton.addEventListener('click', () => openDefinitiveDocument(settlement));
+        row.appendChild(documentButton);
+      }
       if (deps.canWrite && !settlement.isDeleted()) {
         const cancelButton = document.createElement('button');
         cancelButton.type = 'button';

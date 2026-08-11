@@ -11,6 +11,8 @@
 //    marcados como liquidados apuntando a una liquidación inexistente, que
 //    es la peor forma posible de perder plata: en silencio.
 import { Settlement } from '../../domain/settlements/settlement.js';
+import { calculateExpenseNet } from '../../domain/expenses/expense-net-calculator.js';
+import { Money } from '../../shared/money.js';
 import {
   calculateAccountStatement,
   selectSettleableExpenses,
@@ -251,6 +253,59 @@ export class AccountStatementService {
 
     const settlements = await this.deps.settlementRepo.findAllByCaseId(caseId);
     return Result.ok(settlements.sort((a, b) => b.settledAt.getTime() - a.settledAt.getTime()));
+  }
+
+  /**
+   * Reconstruye el detalle de una liquidación ya cerrada, para el documento.
+   *
+   * Hay una sutileza que el documento debe declarar: la liquidación congeló
+   * los TOTALES, no el detalle línea por línea. El detalle se reconstruye
+   * leyendo los gastos por sus ids, y esos gastos pudieron editarse después.
+   * Si la suma del detalle actual no coincide con el total congelado, se
+   * informa `hasDrift: true` — y el documento lo dice en pantalla, en vez de
+   * mostrar dos cifras contradictorias sin explicación.
+   *
+   * @param {import('../../shared/identifier.js').Identifier} settlementId
+   * @param {string} actorUserId
+   * @returns {Promise<Result<{settlement: import('../../domain/settlements/settlement.js').Settlement, lines: object[], hasDrift: boolean, currentTotal: import('../../shared/money.js').Money}>>}
+   */
+  async getSettlementDetail(settlementId, actorUserId) {
+    const settlement = await this.deps.settlementRepo.findById(settlementId);
+    if (!settlement) {
+      return Result.fail(
+        invalid('settlement', 'SETTLEMENT_NOT_FOUND', 'No se encontró la liquidación.'),
+      );
+    }
+    const accessResult = await this.#requireAccess(
+      settlement.caseId.toString(),
+      actorUserId,
+      'read',
+    );
+    if (accessResult.isFailure()) return Result.fail(accessResult.getError());
+
+    const periods = await this.deps.percentagePeriodRepo.findAllByCaseId(settlement.caseId);
+    const percentagePeriodsById = new Map(periods.map((period) => [period.id.toString(), period]));
+
+    const lines = [];
+    let currentTotal = Money.zero(settlement.totalNet.getCurrency());
+    for (const expenseId of settlement.expenseIds) {
+      const expense = await this.deps.expenseRepo.findById(expenseId);
+      if (!expense) continue;
+      const reimbursements = await this.deps.reimbursementRepo.findAllByExpenseId(expense.id);
+      const percentagePeriod = expense.percentagePeriodId
+        ? (percentagePeriodsById.get(expense.percentagePeriodId.toString()) ?? null)
+        : null;
+      const net = calculateExpenseNet(expense, reimbursements, percentagePeriod);
+      currentTotal = currentTotal.add(net.netAmount);
+      lines.push({ expense, net, isRetroactive: false });
+    }
+
+    return Result.ok({
+      settlement,
+      lines,
+      currentTotal,
+      hasDrift: currentTotal.getAmount() !== settlement.totalNet.getAmount(),
+    });
   }
 
   /**

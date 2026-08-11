@@ -298,3 +298,52 @@ test('el historial lista las liquidaciones de la más reciente a la más antigua
   const listed = (await service.listSettlements(caseId, 'uid-lector')).getValue();
   assert.equal(listed.length, 2, 'las anuladas siguen en el historial');
 });
+
+// ---- Detalle para el documento ----
+
+test('el detalle de una liquidación reconstruye sus gastos y no reporta descuadre si nada cambió', async () => {
+  const { service, caseId, addExpense, settlementRepo } = await buildContext();
+  await addExpense({ amount: 100000, date: '2026-08-05', paidBy: 'A' });
+  await addExpense({ amount: 40000, date: '2026-08-06', paidBy: 'B' });
+  await service.settle({ caseId, ...AUGUST, actorUserId: 'uid-editor' });
+  const [settlement] = await settlementRepo.findAllByCaseId(caseId);
+
+  const result = await service.getSettlementDetail(settlement.id, 'uid-editor');
+
+  assert.equal(result.isSuccess(), true);
+  const { lines, hasDrift, currentTotal } = result.getValue();
+  assert.equal(lines.length, 2);
+  assert.equal(currentTotal.getAmount(), 140000);
+  assert.equal(hasDrift, false);
+});
+
+test('si un gasto se edita después de liquidar, el detalle reporta descuadre contra el total congelado', async () => {
+  const { service, caseId, addExpense, expenseRepo, settlementRepo } = await buildContext();
+  const expense = await addExpense({ amount: 100000, date: '2026-08-05', paidBy: 'A' });
+  await service.settle({ caseId, ...AUGUST, actorUserId: 'uid-editor' });
+  const [settlement] = await settlementRepo.findAllByCaseId(caseId);
+
+  // Alguien corrige el monto DESPUÉS de haber cerrado el período.
+  const stored = await expenseRepo.findById(expense.id);
+  stored.update({ amountValue: 70000 }, 'uid-editor', clock);
+  await expenseRepo.save(stored);
+
+  const {
+    hasDrift,
+    currentTotal,
+    settlement: frozen,
+  } = (await service.getSettlementDetail(settlement.id, 'uid-editor')).getValue();
+
+  assert.equal(hasDrift, true, 'el documento debe poder advertirlo');
+  assert.equal(currentTotal.getAmount(), 70000, 'el detalle refleja el gasto actual');
+  assert.equal(frozen.totalNet.getAmount(), 100000, 'pero el total liquidado no cambia nunca');
+});
+
+test('un lector puede obtener el detalle para generar el documento', async () => {
+  const { service, caseId, addExpense, settlementRepo } = await buildContext();
+  await addExpense({ amount: 50000, date: '2026-08-05' });
+  await service.settle({ caseId, ...AUGUST, actorUserId: 'uid-editor' });
+  const [settlement] = await settlementRepo.findAllByCaseId(caseId);
+
+  assert.equal((await service.getSettlementDetail(settlement.id, 'uid-lector')).isSuccess(), true);
+});
