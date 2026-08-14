@@ -53,6 +53,32 @@ export class AuthProvider {
    * @param {(user: AuthUser|null) => void} _callback
    * @returns {() => void} función para desuscribirse
    */
+  /**
+   * Cambia la contraseña de la sesión actual.
+   *
+   * Exige la contraseña ACTUAL, por dos razones que se refuerzan: primero,
+   * impide que alguien que encuentre una sesión abierta se apodere de la
+   * cuenta cambiando la clave; segundo, Firebase rechaza `updatePassword`
+   * con `auth/requires-recent-login` si la sesión lleva rato iniciada, así
+   * que la reautenticación es necesaria de todos modos. Pedirla convierte
+   * un requisito técnico en una protección real.
+   *
+   * @param {string} _currentPassword
+   * @param {string} _newPassword
+   * @returns {Promise<void>}
+   */
+  async changePassword(_currentPassword, _newPassword) {
+    throw new Error('AuthProvider.changePassword no implementado.');
+  }
+
+  /**
+   * @param {string} _displayName
+   * @returns {Promise<void>}
+   */
+  async updateDisplayName(_displayName) {
+    throw new Error('AuthProvider.updateDisplayName no implementado.');
+  }
+
   onAuthStateChanged(_callback) {
     throw new Error('AuthProvider.onAuthStateChanged no implementado.');
   }

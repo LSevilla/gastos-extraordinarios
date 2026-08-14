@@ -161,6 +161,122 @@ export class AuthService {
   }
 
   /**
+   * Cambia la contraseña de la cuenta. Exige la actual — ver la nota en
+   * AuthProvider.changePassword sobre por qué no es un trámite.
+   *
+   * @param {string} currentPassword
+   * @param {string} newPassword
+   * @param {string} confirmPassword
+   * @returns {Promise<Result<void>>}
+   */
+  async changePassword(currentPassword, newPassword, confirmPassword) {
+    if (!currentPassword) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'currentPassword',
+            code: 'AUTH_CURRENT_PASSWORD_REQUIRED',
+            message: 'Ingresa tu contraseña actual.',
+          },
+        ]),
+      );
+    }
+
+    const policy = validatePasswordPolicy(newPassword);
+    if (!policy.isValid()) return Result.fail(policy);
+
+    if (newPassword !== confirmPassword) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'confirmPassword',
+            code: 'AUTH_PASSWORD_MISMATCH',
+            message: 'Las dos contraseñas no coinciden.',
+          },
+        ]),
+      );
+    }
+    // Una contraseña "nueva" idéntica a la anterior da una falsa sensación
+    // de haber rotado la credencial.
+    if (newPassword === currentPassword) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'newPassword',
+            code: 'AUTH_PASSWORD_UNCHANGED',
+            message: 'La contraseña nueva debe ser distinta de la actual.',
+          },
+        ]),
+      );
+    }
+
+    try {
+      await this.deps.authProvider.changePassword(currentPassword, newPassword);
+      return Result.ok(undefined);
+    } catch (error) {
+      logAuthErrorForDevelopers(error, 'changePassword');
+      // El error se atribuye a la contraseña actual porque es la causa
+      // abrumadoramente más frecuente, y así el mensaje aparece junto al
+      // campo que hay que corregir.
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'currentPassword',
+            code: 'AUTH_CHANGE_PASSWORD_FAILED',
+            message: translateAuthError(error),
+          },
+        ]),
+      );
+    }
+  }
+
+  /**
+   * @param {string} displayName
+   * @returns {Promise<Result<import('../../domain/auth/user-profile.js').UserProfile>>}
+   */
+  async updateDisplayName(displayName) {
+    const trimmed = (displayName ?? '').trim();
+    if (trimmed.length < 2) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'displayName',
+            code: 'AUTH_DISPLAY_NAME_REQUIRED',
+            message: 'El nombre debe tener al menos 2 caracteres.',
+          },
+        ]),
+      );
+    }
+
+    try {
+      await this.deps.authProvider.updateDisplayName(trimmed);
+    } catch (error) {
+      logAuthErrorForDevelopers(error, 'updateDisplayName');
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'displayName',
+            code: 'AUTH_UPDATE_PROFILE_FAILED',
+            message: translateAuthError(error),
+          },
+        ]),
+      );
+    }
+
+    // La copia local se actualiza aparte: Firebase es la fuente de la
+    // credencial, pero la aplicación funciona sin conexión y debe mostrar
+    // el nombre nuevo de inmediato.
+    const current = this.deps.authProvider.getCurrentUser();
+    const profile = await this.deps.userProfileRepo.findById(current.uid);
+    if (profile) {
+      profile.displayName = trimmed;
+      profile.updatedAt = this.deps.clock.utcNow();
+      await this.deps.userProfileRepo.save(profile);
+    }
+    return Result.ok(profile);
+  }
+
+  /**
    * Observador central de sesión (Build 1.3a, requisito explícito). No debe
    * llamarse más de una vez por raíz de composición.
    * @param {(profile: import('../../domain/auth/user-profile.js').UserProfile|null) => void} callback

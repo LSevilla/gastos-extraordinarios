@@ -33,6 +33,10 @@ export async function createFirebaseAuthProvider(config) {
     verifyPasswordResetCode,
     confirmPasswordReset,
     onAuthStateChanged,
+    updatePassword,
+    updateProfile,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
   } = await import(FIREBASE_AUTH_URL);
 
   const auth = getAuth(app);
@@ -62,6 +66,22 @@ export async function createFirebaseAuthProvider(config) {
 
     async verifyPasswordResetCode(oobCode) {
       return verifyPasswordResetCode(auth, oobCode);
+    }
+
+    async changePassword(currentPassword, newPassword) {
+      const user = auth.currentUser;
+      if (!user) throw new Error('auth/no-current-user');
+      // Reautenticar SIEMPRE, no solo cuando Firebase lo exija: verificar la
+      // contraseña actual es la protección, no un trámite.
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+    }
+
+    async updateDisplayName(displayName) {
+      const user = auth.currentUser;
+      if (!user) throw new Error('auth/no-current-user');
+      await updateProfile(user, { displayName });
     }
 
     async confirmPasswordReset(oobCode, newPassword) {

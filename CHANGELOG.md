@@ -2,6 +2,49 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.10] — Mi perfil
+
+Agrega la pantalla de perfil de quien está usando la aplicación, con cambio
+de contraseña y de nombre. Se accede desde el encabezado de la pantalla
+principal, junto a "Participantes" y "Cerrar sesión".
+
+### Agregado
+
+- **`views/profile-view.js`** con tres secciones: datos de la cuenta,
+  identidad dentro del caso, y seguridad.
+- **`AuthProvider.changePassword()`** y **`updateDisplayName()`**, con su
+  implementación en Firebase.
+- **`AuthService.changePassword()`**: exige la contraseña actual, aplica la
+  política de contraseñas vigente, verifica que las dos nuevas coincidan y
+  que la nueva sea distinta de la anterior.
+- **`AuthService.updateDisplayName()`**: actualiza el proveedor y luego la
+  copia local, de modo que el nombre nuevo se vea de inmediato aun sin
+  conexión. Si el proveedor falla, la copia local no se toca.
+- **10 pruebas nuevas.** Total: **457**.
+
+### Decisiones
+
+- **Cambiar la contraseña exige escribir la actual.** Impide que alguien que
+  encuentre una sesión abierta se apodere de la cuenta, y además Firebase
+  rechaza `updatePassword` si la sesión lleva rato iniciada, así que la
+  reautenticación era necesaria de todos modos.
+- **El correo no se puede cambiar desde aquí.** Es el identificador de acceso
+  y cambiarlo requiere verificación; la pantalla lo explica en vez de ofrecer
+  un campo que fallaría.
+- **La cuenta y el participante son cosas distintas** y la pantalla lo dice:
+  el nombre de la cuenta sirve para iniciar sesión; el del participante es el
+  que aparece en los gastos y en el estado de cuenta.
+
+### Limitación conocida
+
+- **La correspondencia entre una cuenta y un participante concreto del caso
+  no está registrada en el modelo.** `CaseMembership` vincula una cuenta con
+  un caso, pero no dice cuál de los dos participantes es. Por eso el perfil
+  solo muestra "Apareces como" cuando el caso tiene un único participante, y
+  en cualquier otro caso lo declara desconocido en lugar de adivinar y
+  arriesgarse a atribuirle a alguien los gastos de la otra parte. Resolverlo
+  requiere una decisión de producto y un campo nuevo.
+
 ## [0.4.0-alpha.9] — Documento del estado de cuenta
 
 Genera un documento imprimible y compartible del estado de cuenta, con todo

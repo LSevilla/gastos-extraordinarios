@@ -115,6 +115,14 @@ export function renderHome(root, deps) {
     membersButton.addEventListener('click', deps.onManageMembers);
     header.appendChild(membersButton);
   }
+  if (deps.onOpenProfile) {
+    const profileButton = document.createElement('button');
+    profileButton.type = 'button';
+    profileButton.className = 'home-header__settings';
+    profileButton.textContent = 'Mi perfil';
+    profileButton.addEventListener('click', deps.onOpenProfile);
+    header.appendChild(profileButton);
+  }
   if (deps.onSignOut) {
     const signOutButton = document.createElement('button');
     signOutButton.type = 'button';

@@ -49,6 +49,9 @@ import { MembershipService } from './application/services/membership-service.js'
 import { Clock } from './shared/clock.js';
 import { renderOnboarding } from './presentation/views/onboarding-view.js';
 import { renderHome } from './presentation/views/home-view.js';
+import { renderProfile } from './presentation/views/profile-view.js';
+import { roleLabel } from './presentation/components/role-labels.js';
+
 import { renderManageCase } from './presentation/views/manage-case-view.js';
 import { renderBeneficiaries } from './presentation/views/beneficiaries-view.js';
 import { renderAccountStatement } from './presentation/views/account-statement-view.js';
@@ -269,6 +272,30 @@ async function main() {
         canWrite: canWriteExpenses,
         onBack: () => navigate('manageCase'),
       });
+    } else if (view === 'profile') {
+      // El participante propio se resuelve por la membresía del caso: la
+      // cuenta y el participante son entidades distintas y el perfil debe
+      // mostrar el vínculo, no confundirlos.
+      const membership = await caseMembershipRepo.findByCaseAndUser(
+        summary.caseEntity.id.toString(),
+        currentUserProfile.id,
+      );
+      await renderProfile(root, {
+        authService,
+        userProfile: currentUserProfile,
+        // La membresía vincula una CUENTA con un CASO, pero no apunta a un
+        // participante concreto: en el modelo actual esa correspondencia no
+        // está registrada. Se muestra solo cuando el caso tiene un único
+        // participante y por tanto no hay ambigüedad; en cualquier otro
+        // caso se declara desconocida en vez de adivinar y arriesgar
+        // atribuirle a alguien los gastos de la otra parte.
+        currentParticipant: summary.participants.length === 1 ? summary.participants[0] : null,
+        caseName: summary.caseEntity.name,
+        roleLabel: membership ? roleLabel(membership.role) : 'Sin permisos asignados',
+        onManageParticipants: () => navigate('caseMembers'),
+        onProfileUpdated: () => {},
+        onBack: () => navigate('home'),
+      });
     } else if (view === 'accountStatement') {
       await renderAccountStatement(root, {
         accountStatementService,
@@ -340,6 +367,7 @@ async function main() {
         },
         onSignOut: handleSignOut,
         onManageMembers: () => navigate('caseMembers'),
+        onOpenProfile: () => navigate('profile'),
       });
     }
   }
