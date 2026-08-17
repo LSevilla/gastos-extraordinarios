@@ -2,6 +2,50 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.12] — Arranque en frío: recuperar los casos en un dispositivo nuevo
+
+### Corregido
+
+**Al iniciar sesión en un teléfono nuevo, la aplicación ofrecía crear un caso
+desde cero** en lugar de traer el que ya existía en la nube.
+
+La causa era un problema de arranque: la sincronización necesita el id del
+caso para escuchar sus cambios, pero ese id solo estaba guardado en la base
+local. En un dispositivo nuevo esa base está vacía, así que la sincronización
+—que además arrancaba _dentro_ del bloque que solo corre si ya hay un caso
+local— nunca llegaba a ejecutarse, y la aplicación concluía que la persona era
+nueva.
+
+Es un defecto del cableado del build anterior: la sincronización quedó
+funcionando entre dispositivos que ya conocían el caso, que es justamente el
+escenario que no hacía falta resolver.
+
+### Agregado
+
+- **`DeviceBootstrapService`**: antes de ofrecer crear un caso, consulta las
+  membresías de la cuenta en Firestore —que sí se pueden buscar por usuario—,
+  recupera el caso, lo guarda localmente y marca la incorporación como
+  completada. Recién entonces la sincronización tiene de dónde agarrarse.
+- El caso recuperado se reconstruye como entidad `Case`, no se escribe el
+  documento crudo: así pasa por las mismas invariantes que cualquier otro.
+- **8 pruebas nuevas.** Total: **486**.
+
+### Comportamiento ante fallos
+
+- **Sin conexión o sin permisos, no falla**: informa que no recuperó nada y
+  deja seguir con el flujo normal. Un fallo de red no puede dejar a alguien
+  sin poder usar la aplicación.
+- **Una cuenta realmente nueva** sigue el flujo de creación de siempre, sin
+  inventar casos ni tocar la configuración.
+- **Con varias membresías se recupera la primera.** Elegir entre casos es una
+  decisión de producto que todavía no existe; recuperar uno es estrictamente
+  mejor que no recuperar ninguno.
+
+### Sigue pendiente
+
+- La pantalla para resolver conflictos.
+- Los archivos adjuntos no se sincronizan: solo viajan sus metadatos.
+
 ## [0.4.0-alpha.11] — Sincronización real entre dispositivos
 
 ### Corregido — la sincronización no funcionaba

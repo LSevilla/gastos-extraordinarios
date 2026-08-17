@@ -47,6 +47,7 @@ import { DocumentService } from './application/services/document-service.js';
 import { ExpenseService } from './application/services/expense-service.js';
 import { ReimbursementService } from './application/services/reimbursement-service.js';
 import { AccountStatementService } from './application/services/account-statement-service.js';
+import { DeviceBootstrapService } from './application/services/device-bootstrap-service.js';
 import { AuthService } from './application/services/auth-service.js';
 import { MembershipService } from './application/services/membership-service.js';
 import { Clock } from './shared/clock.js';
@@ -235,6 +236,23 @@ async function main() {
     membershipRepo: caseMembershipRepo,
     clock,
     runAtomicWrite,
+  });
+
+  // Arranque en frío: permite que un dispositivo nuevo recupere sus casos
+  // desde la nube en vez de ofrecer crear uno desde cero.
+  const deviceBootstrapService = new DeviceBootstrapService({
+    membershipRepo: caseMembershipRepo,
+    remoteCaseLoader: {
+      async loadCase(caseId) {
+        const snapshot = await firestoreModule.getDoc(
+          firestoreModule.doc(firestore, 'cases', caseId),
+        );
+        return snapshot.exists() ? snapshot.data() : null;
+      },
+    },
+    caseRepo: rawCaseRepo,
+    appSettingsRepo,
+    clock,
   });
 
   const authProvider = await createFirebaseAuthProvider(firebaseConfig);
@@ -438,7 +456,18 @@ async function main() {
       });
       return;
     }
-    const settings = await appSettingsRepo.get();
+    let settings = await appSettingsRepo.get();
+
+    // Si este dispositivo no tiene nada, puede ser una cuenta realmente
+    // nueva o el mismo usuario en otro aparato. Antes de ofrecerle crear un
+    // caso desde cero se comprueba en la nube: sus datos pueden estar ahí.
+    if (!settings || !settings.onboardingCompleted) {
+      const recovery = await deviceBootstrapService.recoverCasesForUser(currentUserProfile.id);
+      if (recovery.isSuccess() && recovery.getValue().recovered) {
+        settings = await appSettingsRepo.get();
+      }
+    }
+
     if (settings && settings.onboardingCompleted) {
       // El caso local pudo haberse creado antes de que existiera el
       // concepto de membresía (o en este mismo dispositivo) — se asegura
