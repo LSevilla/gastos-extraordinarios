@@ -44,8 +44,8 @@ async function freshDb() {
 // secundario. El Build 1.4 la dejó en 4 (no necesitó migración). El Build
 // 1.5 la sube a 5 al agregar el store `reimbursements` — migración
 // estrictamente aditiva, verificada en tests/integration/schema-migration.test.js.
-test('la versión del esquema IndexedDB es la del Build 1.7 (6), subida solo por el store de liquidaciones', () => {
-  assert.equal(DATABASE_VERSION, 6);
+test('la versión del esquema IndexedDB es 7, subida por los stores de sincronización', () => {
+  assert.equal(DATABASE_VERSION, 7);
 });
 
 test('guardar y recuperar un gasto por ID conserva todos los campos, incluidos los nuevos de auditoría', async () => {

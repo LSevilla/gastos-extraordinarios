@@ -4,7 +4,7 @@
 // tests/unit/app-info.test.js).
 
 export const APP_NAME = 'Aporte Compartido';
-export const APP_VERSION = '0.4.0-alpha.10';
+export const APP_VERSION = '0.4.0-alpha.11';
 export const BUILD_LABEL = 'Sprint 1 · Build 1.1';
 
 /**

@@ -1,5 +1,6 @@
 // src/presentation/views/home-view.js
 import { icon } from '../components/icons.js';
+import { syncStatusLabel } from '../components/role-labels.js';
 import { createInfoButton } from '../components/info-tooltip.js';
 import { showToast } from '../components/toast.js';
 
@@ -114,6 +115,29 @@ export function renderHome(root, deps) {
     membersButton.textContent = 'Participantes';
     membersButton.addEventListener('click', deps.onManageMembers);
     header.appendChild(membersButton);
+  }
+  // Indicador de sincronización. Existía el vocabulario para esto en
+  // role-labels.js desde hace varios Builds, sin usarse: nada informaba al
+  // usuario de si sus datos estaban a salvo en la nube o solo en este
+  // aparato.
+  if (deps.syncStatus) {
+    const syncRow = document.createElement('div');
+    syncRow.className = 'sync-indicator';
+    const hasConflicts = (deps.conflictCount ?? 0) > 0;
+    syncRow.classList.add(`sync-indicator--${hasConflicts ? 'conflict' : deps.syncStatus}`);
+    syncRow.textContent = hasConflicts
+      ? `${deps.conflictCount} dato${deps.conflictCount === 1 ? '' : 's'} cambiado${deps.conflictCount === 1 ? '' : 's'} en los dos dispositivos`
+      : syncStatusLabel(deps.syncStatus);
+
+    if (deps.onSyncNow && deps.syncStatus !== 'synced') {
+      const retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = 'link-button';
+      retryButton.textContent = 'Sincronizar ahora';
+      retryButton.addEventListener('click', deps.onSyncNow);
+      syncRow.appendChild(retryButton);
+    }
+    header.appendChild(syncRow);
   }
   if (deps.onOpenProfile) {
     const profileButton = document.createElement('button');

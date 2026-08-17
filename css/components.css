@@ -585,3 +585,39 @@ body.has-modal-open {
 .link-button:hover {
   text-decoration: none;
 }
+
+/* ---- Indicador de sincronización ---- */
+.sync-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  margin-top: var(--space-3);
+}
+.sync-indicator--synced {
+  background: #ecfdf5;
+  color: #065f46;
+}
+.sync-indicator--pending {
+  background: #fffbeb;
+  color: #92400e;
+}
+.sync-indicator--offline {
+  background: #f1f3f7;
+  color: #475467;
+}
+/* El conflicto y el error usan el mismo rojo a propósito: en ambos casos
+   hay algo que el usuario debe atender, no solo esperar. */
+.sync-indicator--syncError,
+.sync-indicator--conflict {
+  background: #fef2f2;
+  color: #991b1b;
+}
+.sync-indicator .link-button {
+  font-size: inherit;
+  color: inherit;
+  font-weight: 600;
+}

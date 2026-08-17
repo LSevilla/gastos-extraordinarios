@@ -82,6 +82,9 @@ export default [
         crypto: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        // Necesarios para el coordinador de sincronización periódica.
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
         URLSearchParams: 'readonly',
         // URL: necesario para createObjectURL/revokeObjectURL en el visor
         // de comprobantes, que muestra archivos guardados en IndexedDB.

@@ -2,6 +2,67 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.11] — Sincronización real entre dispositivos
+
+### Corregido — la sincronización no funcionaba
+
+Toda la maquinaria existía desde el Build 1.4 —cola de operaciones, motor de
+sincronización, envío a Firestore, escuchadores de cambios remotos, reglas de
+seguridad, y sus pruebas— pero **nada la ponía en marcha**:
+
+- `processPending()` no se llamaba desde ningún punto de la aplicación.
+- No existía ningún código que aplicara a IndexedDB los cambios que llegaban
+  de Firestore: los escuchadores no tenían a quién entregar los datos.
+- No había disparador por reconexión, por intervalo ni por vuelta a primer
+  plano.
+
+En la práctica, cada dispositivo trabajaba contra su propia base local y nada
+se compartía. Esto se fue acumulando build a build sin declararse.
+
+### Agregado
+
+- **`domain/synchronization/conflict-resolution.js`** (función pura): decide
+  entre aplicar, ignorar, marcar conflicto o no hacer nada. La clave es
+  recordar el `updatedAt` de la última sincronización exitosa: sin ese dato es
+  imposible distinguir "solo el otro editó" (aplicar en silencio) de
+  "editamos los dos" (preguntar), y comparar solo las marcas de tiempo
+  destruiría ediciones sin avisar.
+- **`RemoteChangeApplier`**: la mitad de bajada que faltaba. Escribe el
+  registro remoto y su marca de sincronización en la MISMA transacción, para
+  que un corte no deje un dato aplicado sin memoria.
+- **`SyncCoordinator`**: dispara la sincronización al abrir el caso, al
+  recuperar conexión, al volver a la pestaña y cada cinco minutos. Descarta
+  llamadas superpuestas en vez de duplicar trabajo.
+- **Migración v6→v7**, aditiva: `syncMetadata` y `syncConflicts`.
+- **`listenForRemoteSettlementChanges()`**, que faltaba en el motor.
+- **Indicador de estado** en la pantalla principal, con acción para
+  sincronizar a mano. Las etiquetas ya existían sin usarse desde varios builds.
+- **21 pruebas nuevas** (11 de la decisión de conflicto, 10 de integración
+  contra IndexedDB real). Total: **478**.
+
+### Modelo de conflictos, según lo aprobado
+
+- **Por defecto prevalece el más reciente**, pero solo cuando no hay
+  ambigüedad: si únicamente un lado cambió, se resuelve solo.
+- **Si ambos editaron el mismo registro desde la última sincronización, no se
+  decide automáticamente.** El conflicto se marca conservando ambas versiones
+  completas y la persona elige cuál vale. Se marca **aunque la versión remota
+  sea más reciente**: "más nueva" no significa "correcta", y la edición
+  perdida no dejaría rastro.
+- **El aviso no interrumpe.** La sincronización ocurre en segundo plano,
+  posiblemente mientras se está en otra pantalla; abrir una ventana ahí sería
+  intrusivo y llevaría a decidir sin contexto. El indicador informa y la
+  persona resuelve cuando quiera.
+
+### Pendiente
+
+- **Falta la pantalla para resolver conflictos.** La detección, el
+  almacenamiento de ambas versiones y la resolución (`resolveConflict()`)
+  están implementados y probados, pero todavía no hay interfaz para elegir:
+  el indicador avisa que hay conflictos y no permite abrirlos. Es el siguiente
+  paso inmediato.
+- Los adjuntos (Blob) siguen sin sincronizarse: solo viajan sus metadatos.
+
 ## [0.4.0-alpha.10] — Mi perfil
 
 Agrega la pantalla de perfil de quien está usando la aplicación, con cambio

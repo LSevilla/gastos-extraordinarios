@@ -5,7 +5,7 @@
 // beneficiaries, appSettings. v2 (Build 1.2): agrega expenses, documents,
 // documentBlobs — migración aditiva, no toca ningún store existente.
 export const DATABASE_NAME = 'gastos-extraordinarios-db';
-export const DATABASE_VERSION = 6;
+export const DATABASE_VERSION = 7;
 
 export const STORE_NAMES = Object.freeze({
   CASES: 'cases',
@@ -22,6 +22,8 @@ export const STORE_NAMES = Object.freeze({
   INVITATIONS: 'invitations',
   REIMBURSEMENTS: 'reimbursements',
   SETTLEMENTS: 'settlements',
+  SYNC_METADATA: 'syncMetadata',
+  SYNC_CONFLICTS: 'syncConflicts',
 });
 
 /**
@@ -127,6 +129,30 @@ export function runMigrationV6(db) {
 }
 
 /**
+ * Sincronización real entre dispositivos. Dos stores nuevos, aditivos:
+ *
+ *  - `syncMetadata` recuerda, por registro, el `updatedAt` que tenía la
+ *    última vez que se sincronizó con éxito. Sin ese dato es imposible
+ *    distinguir "solo el otro editó" de "editamos los dos", que exigen
+ *    respuestas opuestas (ver domain/synchronization/conflict-resolution.js).
+ *  - `syncConflicts` guarda los conflictos detectados hasta que una persona
+ *    los resuelva. Se conserva la versión remota completa: si se descartara,
+ *    elegirla después sería imposible.
+ *
+ * @param {IDBDatabase} db
+ */
+export function runMigrationV7(db) {
+  // Clave compuesta tipo:id — un gasto y un reembolso pueden compartir id
+  // sin pisarse.
+  db.createObjectStore(STORE_NAMES.SYNC_METADATA, { keyPath: 'key' });
+
+  const conflicts = db.createObjectStore(STORE_NAMES.SYNC_CONFLICTS, { keyPath: 'key' });
+  conflicts.createIndex('caseId', 'caseId');
+  conflicts.createIndex('detectedAt', 'detectedAt');
+  conflicts.createIndex('resolvedAt', 'resolvedAt');
+}
+
+/**
  * Abre (y si corresponde, crea/migra) la base de datos. Usa el `indexedDB`
  * global — en el navegador es el nativo; en pruebas, `fake-indexeddb` lo
  * reemplaza antes de importar este módulo (Development Handbook, Capítulo 9).
@@ -156,6 +182,9 @@ export function openDatabase(databaseName = DATABASE_NAME) {
       }
       if (event.oldVersion < 6) {
         runMigrationV6(db);
+      }
+      if (event.oldVersion < 7) {
+        runMigrationV7(db);
       }
     };
 

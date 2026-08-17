@@ -34,6 +34,9 @@ import { SyncingCaseRepository } from './infrastructure/synchronization/syncing-
 import { SyncingExpenseRepository } from './infrastructure/synchronization/syncing-expense-repository.js';
 import { SyncingReimbursementRepository } from './infrastructure/synchronization/syncing-reimbursement-repository.js';
 import { SyncingSettlementRepository } from './infrastructure/synchronization/syncing-settlement-repository.js';
+import { SyncCoordinator } from './infrastructure/synchronization/sync-coordinator.js';
+import { RemoteChangeApplier } from './infrastructure/synchronization/remote-change-applier.js';
+import { IndexedDbSyncStateRepository } from './infrastructure/indexeddb/repositories/indexeddb-sync-state-repository.js';
 import { DualCaseMembershipRepository } from './infrastructure/synchronization/dual-case-membership-repository.js';
 import { DualInvitationRepository } from './infrastructure/synchronization/dual-invitation-repository.js';
 import { firebaseConfig } from './infrastructure/firebase/firebase-config.js';
@@ -84,6 +87,7 @@ async function main() {
   const invitationLocalRepo = new IndexedDbInvitationRepository(db);
   const rawReimbursementRepo = new IndexedDbReimbursementRepository(db);
   const rawSettlementRepo = new IndexedDbSettlementRepository(db);
+  const syncStateRepo = new IndexedDbSyncStateRepository(db);
 
   // ADR-017: Firestore se inicializa una sola vez (firebase-app.js) y se
   // comparte entre AuthProvider y el motor de sincronización.
@@ -124,6 +128,25 @@ async function main() {
     syncEngine,
     operationQueueRepo,
     clock,
+  });
+
+  // Cierra el circuito de sincronización: hasta ahora la aplicación sabía
+  // encolar y subir, pero nada disparaba el envío ni aplicaba lo que venía
+  // del otro dispositivo.
+  let currentSyncStatus = 'synced';
+  let currentConflictCount = 0;
+  const syncCoordinator = new SyncCoordinator({
+    syncEngine,
+    remoteChangeApplier: new RemoteChangeApplier({ db, syncStateRepo, clock }),
+    operationQueueRepo,
+    syncStateRepo,
+    onStatusChange: (status, detail) => {
+      currentSyncStatus = status;
+      if (typeof detail.conflicts === 'number') currentConflictCount = detail.conflicts;
+      // Solo se redibuja la pantalla principal: repintar cualquier otra
+      // mientras alguien escribe en un formulario le borraría lo escrito.
+      if (lastView === 'home') navigate('home');
+    },
   });
 
   const caseMembershipRepo = new DualCaseMembershipRepository({
@@ -218,7 +241,11 @@ async function main() {
   const authService = new AuthService({ authProvider, userProfileRepo, clock });
   let currentUserProfile = null;
 
+  /** Última vista pintada, para saber si es seguro redibujar sola. */
+  let lastView = null;
+
   async function navigate(view, params = {}) {
+    lastView = view;
     const summaryResult = await caseService.getActiveCaseSummary();
     const summary = summaryResult.getValue();
     if (!summary) {
@@ -368,6 +395,9 @@ async function main() {
         onSignOut: handleSignOut,
         onManageMembers: () => navigate('caseMembers'),
         onOpenProfile: () => navigate('profile'),
+        syncStatus: currentSyncStatus,
+        conflictCount: currentConflictCount,
+        onSyncNow: () => syncCoordinator.syncNow('manual'),
       });
     }
   }
@@ -420,6 +450,9 @@ async function main() {
           summary.caseEntity.id.toString(),
           currentUserProfile.id,
         );
+        // Aquí arranca la sincronización real: envía lo pendiente y queda
+        // escuchando los cambios del otro dispositivo.
+        await syncCoordinator.start(summary.caseEntity.id);
       }
       await navigate('home');
     } else {
@@ -437,6 +470,9 @@ async function main() {
   }
 
   async function handleSignOut() {
+    // Detener antes de cerrar sesión: dejar escuchas activas sobre datos de
+    // una cuenta que ya no está autenticada provoca errores de permisos.
+    await syncCoordinator.stop();
     await authService.signOut();
     // renderLogin real llega vía el observador de sesión (onAuthStateChanged),
     // que se dispara automáticamente tras signOut() — no se navega a mano.

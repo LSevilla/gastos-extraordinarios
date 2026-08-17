@@ -348,6 +348,25 @@ export class SyncEngine {
     return unsubscribe;
   }
 
+  /**
+   * Escucha cambios remotos sobre las liquidaciones de un caso.
+   * @param {Identifier} caseId
+   * @param {(remoteData: object, settlementId: string) => Promise<void>} onRemoteChange
+   * @returns {() => void} desuscripción
+   */
+  listenForRemoteSettlementChanges(caseId, onRemoteChange) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const settlementsQuery = fs.query(
+      fs.collection(firestore, SETTLEMENTS_COLLECTION),
+      fs.where('caseId', '==', caseId.toString()),
+    );
+    const unsubscribe = fs.onSnapshot(settlementsQuery, (querySnap) => {
+      querySnap.docs.forEach((docSnap) => onRemoteChange(docSnap.data(), docSnap.id));
+    });
+    this.unsubscribers.push(unsubscribe);
+    return unsubscribe;
+  }
+
   /** Detiene todas las escuchas activas — usar al cerrar sesión. */
   stopAll() {
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
