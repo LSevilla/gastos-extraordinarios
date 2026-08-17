@@ -39,6 +39,29 @@ export class DualCaseMembershipRepository extends CaseMembershipRepository {
   }
 
   /**
+   * Busca las membresías de una cuenta CONSULTANDO FIRESTORE, no la copia
+   * local, y guarda lo que encuentre.
+   *
+   * Existe como método aparte —en vez de cambiar `findByUser()`— porque son
+   * dos preguntas distintas: `findByUser()` responde "¿qué sé yo de esta
+   * cuenta?" y se usa en cada navegación, donde ir a la red sería lento y
+   * rompería el funcionamiento sin conexión. Este responde "¿a qué casos
+   * pertenece esta cuenta, según la nube?", y solo tiene sentido en un
+   * dispositivo que todavía no sabe nada: preguntarle a una base vacía
+   * siempre devuelve vacío.
+   *
+   * @param {string} userId
+   * @returns {Promise<import('../../domain/case-memberships/case-membership.js').CaseMembership[]>}
+   */
+  async fetchByUserFromRemote(userId) {
+    const remoteMemberships = await this.remote.findByUser(userId);
+    for (const membership of remoteMemberships) {
+      await this.local.save(membership);
+    }
+    return remoteMemberships;
+  }
+
+  /**
    * Refresca la copia local desde Firestore — se llama tras operaciones
    * colaborativas (aceptar/revocar) para no depender solo de lo que este
    * mismo dispositivo escribió.

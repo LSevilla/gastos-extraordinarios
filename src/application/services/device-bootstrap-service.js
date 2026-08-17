@@ -47,7 +47,11 @@ export class DeviceBootstrapService {
   async recoverCasesForUser(userId) {
     let memberships;
     try {
-      memberships = await this.deps.membershipRepo.findByUser(userId);
+      // Se consulta la NUBE a propósito. `findByUser()` lee la copia local,
+      // que en un dispositivo nuevo está vacía: preguntarle ahí siempre
+      // devolvería "no tienes casos" y la aplicación ofrecería crear uno
+      // desde cero teniendo los datos a salvo en Firestore.
+      memberships = await this.deps.membershipRepo.fetchByUserFromRemote(userId);
     } catch (error) {
       // Sin conexión o sin permisos todavía: no es un error que deba
       // detener el arranque.

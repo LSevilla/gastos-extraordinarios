@@ -18,9 +18,16 @@ function buildContext({
 
   const service = new DeviceBootstrapService({
     membershipRepo: {
-      async findByUser() {
+      // Debe consultar la NUBE, no la copia local: en un dispositivo nuevo
+      // la copia local está vacía por definición.
+      async fetchByUserFromRemote() {
         if (membershipError) throw membershipError;
         return memberships;
+      },
+      async findByUser() {
+        throw new Error(
+          'El arranque en frío no puede usar findByUser(): lee la copia local, que está vacía.',
+        );
       },
     },
     remoteCaseLoader: {

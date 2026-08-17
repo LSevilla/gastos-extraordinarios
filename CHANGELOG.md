@@ -2,6 +2,37 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.13] — El arranque en frío consultaba la base equivocada
+
+### Corregido
+
+El arranque en frío del build anterior **preguntaba a la copia local en vez
+de a Firestore**. En un dispositivo nuevo esa copia está vacía por
+definición, así que siempre respondía "esta cuenta no tiene casos" y la
+aplicación ofrecía crear uno desde cero — con los datos intactos en la nube.
+
+La causa: `DualCaseMembershipRepository.findByUser()` delega en `local`, y el
+servicio de recuperación se escribió asumiendo que iba a la nube, sin
+verificarlo. Verificado en Firestore que el caso, la membresía (`role: owner`,
+`status: active`) y los gastos estaban correctos: el problema nunca estuvo en
+los datos, sino en dónde se los buscaba.
+
+- **`fetchByUserFromRemote()`**: consulta Firestore y guarda lo que encuentra
+  en la copia local. Se añade como método aparte en vez de cambiar
+  `findByUser()`, porque son preguntas distintas: `findByUser()` responde
+  "¿qué sé yo de esta cuenta?" y se usa en cada navegación, donde ir a la red
+  sería lento y rompería el funcionamiento sin conexión.
+- La prueba del arranque en frío ahora **falla explícitamente** si alguien
+  vuelve a usar el método local, en vez de pasar en silencio con un doble
+  vacío.
+
+Total: **486** pruebas.
+
+### Sigue pendiente
+
+- La pantalla para resolver conflictos.
+- Los archivos adjuntos no se sincronizan: solo viajan sus metadatos.
+
 ## [0.4.0-alpha.12] — Arranque en frío: recuperar los casos en un dispositivo nuevo
 
 ### Corregido
