@@ -34,6 +34,8 @@ import { SyncingCaseRepository } from './infrastructure/synchronization/syncing-
 import { SyncingExpenseRepository } from './infrastructure/synchronization/syncing-expense-repository.js';
 import { SyncingReimbursementRepository } from './infrastructure/synchronization/syncing-reimbursement-repository.js';
 import { SyncingSettlementRepository } from './infrastructure/synchronization/syncing-settlement-repository.js';
+import { SyncingParticipantRepository } from './infrastructure/synchronization/syncing-participant-repository.js';
+import { SyncingBeneficiaryRepository } from './infrastructure/synchronization/syncing-beneficiary-repository.js';
 import { SyncCoordinator } from './infrastructure/synchronization/sync-coordinator.js';
 import { RemoteChangeApplier } from './infrastructure/synchronization/remote-change-applier.js';
 import { IndexedDbSyncStateRepository } from './infrastructure/indexeddb/repositories/indexeddb-sync-state-repository.js';
@@ -54,6 +56,7 @@ import { Clock } from './shared/clock.js';
 import { renderOnboarding } from './presentation/views/onboarding-view.js';
 import { renderHome } from './presentation/views/home-view.js';
 import { renderProfile } from './presentation/views/profile-view.js';
+import { renderIncompleteCase } from './presentation/views/incomplete-case-view.js';
 import { roleLabel } from './presentation/components/role-labels.js';
 
 import { renderManageCase } from './presentation/views/manage-case-view.js';
@@ -126,9 +129,9 @@ async function main() {
   const clock = Clock.system();
 
   const rawCaseRepo = new IndexedDbCaseRepository(db);
-  const participantRepo = new IndexedDbParticipantRepository(db);
+  const rawParticipantRepo = new IndexedDbParticipantRepository(db);
   const percentagePeriodRepo = new IndexedDbPercentagePeriodRepository(db);
-  const beneficiaryRepo = new IndexedDbBeneficiaryRepository(db);
+  const rawBeneficiaryRepo = new IndexedDbBeneficiaryRepository(db);
   const appSettingsRepo = new IndexedDbAppSettingsRepository(db);
   const rawExpenseRepo = new IndexedDbExpenseRepository(db);
   const documentRepo = new IndexedDbDocumentRepository(db);
@@ -155,6 +158,8 @@ async function main() {
     expenseRepo: rawExpenseRepo,
     reimbursementRepo: rawReimbursementRepo,
     settlementRepo: rawSettlementRepo,
+    participantRepo: rawParticipantRepo,
+    beneficiaryRepo: rawBeneficiaryRepo,
     firestore,
     firestoreModule,
     clock,
@@ -184,6 +189,16 @@ async function main() {
     syncEngine,
     operationQueueRepo,
     clock,
+  });
+  // Sin estos dos decoradores, participantes y beneficiarios solo existían
+  // en el dispositivo donde se crearon.
+  const participantRepo = new SyncingParticipantRepository({
+    inner: rawParticipantRepo,
+    syncEngine,
+  });
+  const beneficiaryRepo = new SyncingBeneficiaryRepository({
+    inner: rawBeneficiaryRepo,
+    syncEngine,
   });
 
   // Cierra el circuito de sincronización: hasta ahora la aplicación sabía
@@ -307,6 +322,11 @@ async function main() {
     },
     caseRepo: rawCaseRepo,
     appSettingsRepo,
+    // Descarga de participantes y beneficiarios: sin ellos el caso
+    // recuperado es inservible.
+    caseMembersLoader: syncEngine,
+    participantRepo: rawParticipantRepo,
+    beneficiaryRepo: rawBeneficiaryRepo,
     clock,
   });
 
@@ -334,6 +354,22 @@ async function main() {
     // el formulario de gastos sigue usando el primer participante local
     // (Build 1.3a) — vincular esto a la sesión real de Firebase es trabajo
     // de un Build posterior, no de este.
+    // Un caso SIN participantes es un estado real, no un imposible: ocurre
+    // en un dispositivo nuevo que recuperó el caso desde la nube antes de
+    // que sus participantes terminaran de descargarse. Suponer que siempre
+    // hay dos hacía que la aplicación reventara al arrancar, con pantalla
+    // en blanco. Se avisa y se ofrece reintentar, en vez de caerse.
+    if (!summary.participants || summary.participants.length === 0) {
+      renderIncompleteCase(root, {
+        caseName: summary.caseEntity.name,
+        onRetry: async () => {
+          await syncCoordinator.syncNow('manual');
+          await navigate('home');
+        },
+        onSignOut: handleSignOut,
+      });
+      return;
+    }
     const currentParticipantId = summary.participants[0].id;
     const beneficiariesResult = await beneficiaryService.listBeneficiaries(summary.caseEntity.id);
     const beneficiaries = beneficiariesResult.getValue();

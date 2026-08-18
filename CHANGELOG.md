@@ -2,6 +2,50 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.18] — Participantes y beneficiarios nunca se sincronizaban
+
+### Causa raíz encontrada
+
+El error real, visible por fin en pantalla:
+`undefined is not an object (evaluating 'summary.participants[0].id')`.
+
+**Participantes y beneficiarios nunca se subían a Firestore.** Se sincronizaban
+casos, gastos, reembolsos y liquidaciones, pero no las personas que componen
+el caso. Un dispositivo nuevo recuperaba el caso vacío, y `app.js` asumía sin
+comprobar que siempre hay al menos un participante: la excepción ocurría
+durante el arranque, antes de pintar nada, dejando la pantalla en blanco.
+
+### Corregido
+
+- **`sync:participant` y `sync:beneficiary`** en el motor de sincronización,
+  con sus decoradores `SyncingParticipantRepository` y
+  `SyncingBeneficiaryRepository`. Sin ellos, ambas entidades solo existían en
+  el dispositivo donde se crearon.
+- **`fetchCaseMembersFromRemote()`**: lectura puntual que el arranque en frío
+  necesita antes de poder pintar nada, a diferencia de las escuchas.
+- **El arranque en frío descarga participantes y beneficiarios** además del
+  caso. Si esa descarga falla, el caso se recupera igualmente.
+- **`app.js` ya no asume que hay participantes.** Un caso sin ellos es un
+  estado real y transitorio, no un imposible.
+- **Reglas de Firestore** para `participants` y `beneficiaries`, sin borrado
+  físico: un participante eliminado dejaría gastos apuntando a nadie.
+
+### Agregado
+
+- **`incomplete-case-view.js`**: pantalla que explica que el caso se encontró
+  pero sus datos aún se están descargando, con botón para reintentar. Un
+  estado incompleto se puede explicar y reintentar; un cuelgue, no.
+- **2 pruebas** del arranque con descarga de participantes, incluida la que
+  verifica que un fallo de red no impide recuperar el caso.
+
+Total: **494** pruebas.
+
+### Requiere acción
+
+**Hay que publicar `firestore.rules` de nuevo.** Sin las reglas de
+`participants` y `beneficiaries`, la subida será rechazada y el problema
+persistirá.
+
 ## [0.4.0-alpha.17] — La pantalla en blanco era un cuelgue, no un error
 
 ### Diagnóstico corregido

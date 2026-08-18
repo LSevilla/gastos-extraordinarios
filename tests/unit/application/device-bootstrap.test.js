@@ -14,6 +14,9 @@ function buildContext({
   remoteCase = { name: 'Rojas / Sevilla', operationMode: 'individual' },
   localCase = null,
   settings = null,
+  caseMembersLoader = null,
+  participantRepo = { async save() {} },
+  beneficiaryRepo = { async save() {} },
 } = {}) {
   const saved = { cases: [], settings: null };
 
@@ -49,6 +52,9 @@ function buildContext({
         saved.cases.push(caseEntity);
       },
     },
+    caseMembersLoader,
+    participantRepo,
+    beneficiaryRepo,
     appSettingsRepo: {
       async get() {
         return settings;
@@ -176,4 +182,79 @@ test('si la nube no responde nunca, el arranque no se queda colgado: corta y sig
     `debe rendirse por tiempo límite y no esperar para siempre (tardó ${elapsed} ms)`,
   );
   assert.equal(saved.cases.length, 0);
+});
+
+test('el arranque descarga también participantes y beneficiarios: sin ellos el caso es inservible', async () => {
+  const savedParticipants = [];
+  const savedBeneficiaries = [];
+  const { service } = buildContext({
+    memberships: [membership(CASE_ID)],
+    caseMembersLoader: {
+      async fetchCaseMembersFromRemote() {
+        return {
+          participants: [
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              caseId: CASE_ID,
+              firstName: 'Ana',
+              lastName: 'Rojas',
+            },
+            {
+              id: '44444444-4444-4444-8444-444444444444',
+              caseId: CASE_ID,
+              firstName: 'Beto',
+              lastName: 'Sevilla',
+            },
+          ],
+          beneficiaries: [
+            {
+              id: '55555555-5555-4555-8555-555555555555',
+              caseId: CASE_ID,
+              firstName: 'Hijo',
+              lastName: 'Uno',
+            },
+          ],
+        };
+      },
+    },
+    participantRepo: {
+      async save(p) {
+        savedParticipants.push(p);
+      },
+    },
+    beneficiaryRepo: {
+      async save(b) {
+        savedBeneficiaries.push(b);
+      },
+    },
+  });
+
+  const result = await service.recoverCasesForUser('uid-1');
+
+  assert.equal(result.getValue().recovered, true);
+  assert.equal(savedParticipants.length, 2, 'las dos partes deben quedar en el dispositivo');
+  assert.equal(savedBeneficiaries.length, 1);
+  assert.equal(savedParticipants[0].getFullName(), 'Ana Rojas');
+});
+
+test('si la descarga de participantes falla, el caso se recupera igual y no se pierde el arranque', async () => {
+  const { service } = buildContext({
+    memberships: [membership(CASE_ID)],
+    caseMembersLoader: {
+      async fetchCaseMembersFromRemote() {
+        throw new Error('sin red');
+      },
+    },
+    participantRepo: { async save() {} },
+    beneficiaryRepo: { async save() {} },
+  });
+
+  const result = await service.recoverCasesForUser('uid-1');
+
+  assert.equal(result.isSuccess(), true);
+  assert.equal(
+    result.getValue().recovered,
+    true,
+    'el caso se recupera; la pantalla de caso incompleto permite reintentar',
+  );
 });

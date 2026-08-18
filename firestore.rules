@@ -199,6 +199,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Participantes y beneficiarios ----
+    // Se agregan en un build de corrección: nunca se sincronizaban, así que
+    // un dispositivo nuevo recuperaba el caso sin las personas que lo
+    // componen y la aplicación no podía ni pintar la pantalla principal.
+    // Sin borrado físico: los beneficiarios se desactivan (isActive), y un
+    // participante eliminado dejaría gastos apuntando a nadie.
+
+    match /participants/{participantId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn() && canWrite(request.resource.data.caseId);
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && request.resource.data.caseId == resource.data.caseId;
+      allow delete: if false;
+    }
+
+    match /beneficiaries/{beneficiaryId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn() && canWrite(request.resource.data.caseId);
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && request.resource.data.caseId == resource.data.caseId;
+      allow delete: if false;
+    }
+
     // ---- Invitaciones ----
 
     match /invitations/{invitationId} {

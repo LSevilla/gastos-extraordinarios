@@ -15,6 +15,8 @@
 // nada de antemano. Con eso se recupera el caso, se guarda localmente, y
 // recién entonces la sincronización tiene de dónde agarrarse.
 import { Case } from '../../domain/cases/case.js';
+import { Participant } from '../../domain/participants/participant.js';
+import { Beneficiary } from '../../domain/beneficiaries/beneficiary.js';
 import { AppSettings } from '../../domain/configuration/app-settings.js';
 import { Identifier } from '../../shared/identifier.js';
 import { Result } from '../../shared/result.js';
@@ -143,6 +145,57 @@ export class DeviceBootstrapService {
           remoteCase.updatedAt ? new Date(remoteCase.updatedAt) : now,
         ),
       );
+    }
+
+    // Participantes y beneficiarios: sin ellos el caso es inservible y la
+    // aplicación no puede ni pintar la pantalla principal, porque el reparto
+    // de gastos necesita saber quiénes son las dos partes.
+    if (this.deps.caseMembersLoader) {
+      try {
+        const members = await withTimeout(
+          this.deps.caseMembersLoader.fetchCaseMembersFromRemote(
+            Identifier.from(caseId).getValue(),
+          ),
+          REMOTE_LOOKUP_TIMEOUT_MS,
+        );
+        for (const raw of members.participants ?? []) {
+          await this.deps.participantRepo.save(
+            new Participant(
+              Identifier.from(raw.id).getValue(),
+              Identifier.from(raw.caseId).getValue(),
+              raw.firstName ?? '',
+              raw.lastName ?? '',
+              raw.rut ?? null,
+              raw.email ?? null,
+              raw.phone ?? null,
+              raw.label ?? null,
+              raw.isActive !== false,
+              raw.createdAt ? new Date(raw.createdAt) : this.deps.clock.utcNow(),
+              raw.updatedAt ? new Date(raw.updatedAt) : this.deps.clock.utcNow(),
+            ),
+          );
+        }
+        for (const raw of members.beneficiaries ?? []) {
+          await this.deps.beneficiaryRepo.save(
+            new Beneficiary(
+              Identifier.from(raw.id).getValue(),
+              Identifier.from(raw.caseId).getValue(),
+              raw.firstName ?? '',
+              raw.lastName ?? '',
+              raw.birthDate ? new Date(raw.birthDate) : null,
+              raw.notes ?? '',
+              raw.isActive !== false,
+              raw.createdAt ? new Date(raw.createdAt) : this.deps.clock.utcNow(),
+              raw.updatedAt ? new Date(raw.updatedAt) : this.deps.clock.utcNow(),
+            ),
+          );
+        }
+      } catch (error) {
+        // Se continúa igualmente: el caso ya está recuperado y la pantalla
+        // de caso incompleto permite reintentar la descarga. Fallar aquí
+        // dejaría a la persona sin nada.
+        console.warn('[arranque] No se pudieron descargar participantes:', error);
+      }
     }
 
     // Marcar la incorporación como completada es lo que impide que la

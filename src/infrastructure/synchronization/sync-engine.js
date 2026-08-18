@@ -17,6 +17,11 @@ const CASES_COLLECTION = 'cases';
 const EXPENSES_COLLECTION = 'expenses';
 const REIMBURSEMENTS_COLLECTION = 'reimbursements';
 const SETTLEMENTS_COLLECTION = 'settlements';
+// Build de corrección: participantes y beneficiarios nunca se subían. En un
+// dispositivo nuevo el caso se recuperaba vacío y la aplicación reventaba al
+// asumir que siempre hay dos participantes.
+const PARTICIPANTS_COLLECTION = 'participants';
+const BENEFICIARIES_COLLECTION = 'beneficiaries';
 
 export class SyncEngine {
   /**
@@ -26,6 +31,8 @@ export class SyncEngine {
    *   expenseRepo?: import('../../domain/expenses/expense-repository.js').ExpenseRepository,
    *   reimbursementRepo?: import('../../domain/reimbursements/reimbursement-repository.js').ReimbursementRepository,
    *   settlementRepo?: import('../../domain/settlements/settlement-repository.js').SettlementRepository,
+   *   participantRepo?: import('../../domain/participants/participant-repository.js').ParticipantRepository,
+   *   beneficiaryRepo?: import('../../domain/beneficiaries/beneficiary-repository.js').BeneficiaryRepository,
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
@@ -101,6 +108,32 @@ export class SyncEngine {
   }
 
   /**
+   * @param {Identifier} participantId
+   */
+  async enqueueParticipantSync(participantId) {
+    await this.deps.operationQueueRepo.save(
+      OperationQueueEntry.create(
+        'sync:participant',
+        { participantId: participantId.toString() },
+        this.deps.clock,
+      ),
+    );
+  }
+
+  /**
+   * @param {Identifier} beneficiaryId
+   */
+  async enqueueBeneficiarySync(beneficiaryId) {
+    await this.deps.operationQueueRepo.save(
+      OperationQueueEntry.create(
+        'sync:beneficiary',
+        { beneficiaryId: beneficiaryId.toString() },
+        this.deps.clock,
+      ),
+    );
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.
@@ -146,6 +179,26 @@ export class SyncEngine {
             findById: (id) => this.deps.settlementRepo.findById(id),
             push: (entity) => this.#pushSettlementToFirestore(entity),
             logLabel: 'sync:settlement',
+          },
+        );
+      } else if (entry.type === 'sync:participant') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.participantId).getValue(),
+          {
+            findById: (id) => this.deps.participantRepo.findById(id),
+            push: (entity) => this.#pushParticipantToFirestore(entity),
+            logLabel: 'sync:participant',
+          },
+        );
+      } else if (entry.type === 'sync:beneficiary') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.beneficiaryId).getValue(),
+          {
+            findById: (id) => this.deps.beneficiaryRepo.findById(id),
+            push: (entity) => this.#pushBeneficiaryToFirestore(entity),
+            logLabel: 'sync:beneficiary',
           },
         );
       }
@@ -285,6 +338,66 @@ export class SyncEngine {
       cancelledByUserId: settlement.cancelledByUserId,
       cancellationReason: settlement.cancellationReason,
     });
+  }
+
+  /**
+   * @param {import('../../domain/participants/participant.js').Participant} participant
+   */
+  async #pushParticipantToFirestore(participant) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    await fs.setDoc(fs.doc(firestore, PARTICIPANTS_COLLECTION, participant.id.toString()), {
+      caseId: participant.caseId.toString(),
+      firstName: participant.firstName,
+      lastName: participant.lastName,
+      rut: participant.rut ?? null,
+      email: participant.email ?? null,
+      phone: participant.phone ?? null,
+      label: participant.label ?? null,
+      isActive: participant.isActive,
+      createdAt: participant.createdAt.toISOString(),
+      updatedAt: participant.updatedAt.toISOString(),
+    });
+  }
+
+  /**
+   * @param {import('../../domain/beneficiaries/beneficiary.js').Beneficiary} beneficiary
+   */
+  async #pushBeneficiaryToFirestore(beneficiary) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    await fs.setDoc(fs.doc(firestore, BENEFICIARIES_COLLECTION, beneficiary.id.toString()), {
+      caseId: beneficiary.caseId.toString(),
+      firstName: beneficiary.firstName,
+      lastName: beneficiary.lastName,
+      birthDate: beneficiary.birthDate ? beneficiary.birthDate.toISOString() : null,
+      notes: beneficiary.notes ?? '',
+      isActive: beneficiary.isActive,
+      createdAt: beneficiary.createdAt.toISOString(),
+      updatedAt: beneficiary.updatedAt.toISOString(),
+    });
+  }
+
+  /**
+   * Descarga participantes y beneficiarios de un caso. A diferencia de las
+   * escuchas, esto es una lectura puntual: la usa el arranque en frío, que
+   * necesita los datos ANTES de poder pintar nada.
+   * @param {Identifier} caseId
+   * @returns {Promise<{participants: object[], beneficiaries: object[]}>}
+   */
+  async fetchCaseMembersFromRemote(caseId) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const load = async (collectionName) => {
+      const snap = await fs.getDocs(
+        fs.query(
+          fs.collection(firestore, collectionName),
+          fs.where('caseId', '==', caseId.toString()),
+        ),
+      );
+      return snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    };
+    return {
+      participants: await load(PARTICIPANTS_COLLECTION),
+      beneficiaries: await load(BENEFICIARIES_COLLECTION),
+    };
   }
 
   /**
