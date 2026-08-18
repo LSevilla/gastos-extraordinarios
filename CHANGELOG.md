@@ -2,6 +2,25 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.22] — Fallo al abrir opciones del menú
+
+### Corregido
+
+- **`lastView` se usaba antes de declararse.** El manejador del estado de
+  sincronización la leía en la línea 220, pero la declaración `let` estaba en
+  la 355. En JavaScript eso lanza `ReferenceError`, y ese código se ejecuta
+  cada vez que cambia el estado de sincronización — es decir, justo mientras
+  se navega. Declarada ahora antes de su primer uso.
+- **El redibujo automático de la pantalla principal podía propagar su fallo**
+  a toda la aplicación. Ahora se captura: ocurre en segundo plano y no debe
+  afectar a quien está usando otra pantalla.
+- **La navegación no manejaba errores.** Cualquier excepción al abrir una
+  opción del menú vaciaba la pantalla sin explicación, y la única salida era
+  recargar. Ahora se muestra qué falló y un botón para volver al inicio: un
+  fallo al abrir UNA pantalla no puede inutilizar toda la aplicación.
+
+Total: **503** pruebas.
+
 ## [0.4.0-alpha.21] — Revertir la inicialización de sesión que rompió el arranque
 
 ### Corregido

@@ -1,6 +1,6 @@
 {
   "name": "gastos-extraordinarios",
-  "version": "0.4.0-alpha.21",
+  "version": "0.4.0-alpha.22",
   "private": true,
   "description": "Control de gastos extraordinarios de pensión de alimentos. Offline-first, sin backend en v1.",
   "type": "module",

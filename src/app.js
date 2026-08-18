@@ -207,6 +207,11 @@ async function main() {
   // del otro dispositivo.
   let currentSyncStatus = 'synced';
   let currentConflictCount = 0;
+  // Declarada ACÁ, antes del primer uso. Estaba más abajo, y como `let` no
+  // se puede leer antes de su declaración: si el estado de sincronización
+  // cambiaba antes de llegar a esa línea, lanzaba ReferenceError y rompía la
+  // aplicación en marcha.
+  let lastView = null;
   const syncCoordinator = new SyncCoordinator({
     syncEngine,
     remoteChangeApplier: new RemoteChangeApplier({ db, syncStateRepo, clock }),
@@ -217,7 +222,14 @@ async function main() {
       if (typeof detail.conflicts === 'number') currentConflictCount = detail.conflicts;
       // Solo se redibuja la pantalla principal: repintar cualquier otra
       // mientras alguien escribe en un formulario le borraría lo escrito.
-      if (lastView === 'home') navigate('home');
+      // Solo se redibuja la pantalla principal, y nunca se deja que un
+      // fallo aquí propague: esto corre en segundo plano, y un error
+      // mientras la persona está usando otra pantalla la dejaría sin nada.
+      if (lastView === 'home') {
+        navigate('home').catch((error) =>
+          console.warn('[sync] No se pudo actualizar la pantalla principal:', error),
+        );
+      }
     },
   });
 
@@ -351,10 +363,51 @@ async function main() {
   const authService = new AuthService({ authProvider, userProfileRepo, clock });
   let currentUserProfile = null;
 
-  /** Última vista pintada, para saber si es seguro redibujar sola. */
-  let lastView = null;
-
+  /**
+   * Navegación segura: si pintar una pantalla falla, se muestra el error y se
+   * ofrece volver, en vez de dejar la aplicación en blanco.
+   *
+   * Antes, cualquier excepción al abrir una opción del menú vaciaba la
+   * pantalla sin explicación, y la única salida era recargar. Un fallo al
+   * abrir UNA pantalla no puede inutilizar toda la aplicación.
+   *
+   * @param {string} view
+   * @param {object} params
+   */
   async function navigate(view, params = {}) {
+    try {
+      await renderView(view, params);
+    } catch (error) {
+      console.error(`[navegación] Falló al abrir "${view}":`, error);
+      root.innerHTML = '';
+      const container = document.createElement('div');
+      container.className = 'container stack';
+      const card = document.createElement('div');
+      card.className = 'card stack';
+      card.innerHTML = `
+        <h2 class="section-title">No se pudo abrir esta pantalla</h2>
+        <p class="muted-text">${escapeForMessage(String(error && error.message ? error.message : error))}</p>
+      `;
+      const backButton = document.createElement('button');
+      backButton.type = 'button';
+      backButton.className = 'btn btn-primary btn-block';
+      backButton.textContent = 'Volver al inicio';
+      backButton.addEventListener('click', () => navigate('home'));
+      card.appendChild(backButton);
+      container.appendChild(card);
+      root.appendChild(container);
+    }
+  }
+
+  /** @param {string} value */
+  function escapeForMessage(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+  }
+
+  async function renderView(view, params = {}) {
     lastView = view;
     const summaryResult = await caseService.getActiveCaseSummary();
     const summary = summaryResult.getValue();
