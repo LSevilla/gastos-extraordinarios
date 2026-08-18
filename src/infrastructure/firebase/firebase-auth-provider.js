@@ -37,29 +37,31 @@ export async function createFirebaseAuthProvider(config) {
     updateProfile,
     reauthenticateWithCredential,
     EmailAuthProvider,
-    initializeAuth,
+    setPersistence,
     indexedDBLocalPersistence,
     browserLocalPersistence,
   } = await import(FIREBASE_AUTH_URL);
 
-  // Persistencia explícita, con alternativas en orden.
+  const auth = getAuth(app);
+
+  // Persistencia de sesión: se PIDE, pero nunca se exige.
   //
-  // `getAuth()` elige por su cuenta, y en el contenedor aislado de una
-  // aplicación añadida a la pantalla de inicio en iOS esa elección puede
-  // fallar: la sesión no se conserva y, sin autenticación, las reglas de
-  // Firestore rechazan todo — el caso no se puede recuperar y la aplicación
-  // queda inservible aunque los datos estén en la nube.
+  // Un intento anterior usó `initializeAuth()` para declararla desde el
+  // principio. Fue un error: si algo falla ahí, la autenticación queda
+  // inservible y la aplicación no arranca — rompió incluso el caso que ya
+  // funcionaba. `getAuth()` es el camino probado, y la preferencia se aplica
+  // después, sin bloquear.
   //
-  // Declararlo evita depender de esa heurística. Si `initializeAuth` falla
-  // (por ejemplo, porque ya se inicializó antes), se cae a `getAuth()`, que
-  // devuelve la instancia existente.
-  let auth;
-  try {
-    auth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-    });
-  } catch {
-    auth = getAuth(app);
+  // Importa en iOS: en el contenedor de una aplicación añadida a la pantalla
+  // de inicio, sin persistencia la sesión se pierde al cerrarla y las reglas
+  // de Firestore rechazan todo. Pero si no se consigue, es preferible una
+  // sesión que dura poco a una aplicación que no abre.
+  if (typeof setPersistence === 'function' && indexedDBLocalPersistence) {
+    setPersistence(auth, indexedDBLocalPersistence).catch(() =>
+      browserLocalPersistence
+        ? setPersistence(auth, browserLocalPersistence).catch(() => {})
+        : undefined,
+    );
   }
 
   if (config.useEmulator) {

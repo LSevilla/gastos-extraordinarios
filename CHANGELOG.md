@@ -2,6 +2,35 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.21] — Revertir la inicialización de sesión que rompió el arranque
+
+### Corregido
+
+El build anterior cambió `getAuth()` por `initializeAuth()` para declarar la
+persistencia de sesión. Fue un error: **rompió el arranque incluso en Safari,
+donde la aplicación ya funcionaba**. El síntoma era `Script error.` en el paso
+"Preparando el inicio de sesión…" — un fallo en un script de otro dominio, sin
+más detalle, porque el navegador oculta la causa por seguridad.
+
+`initializeAuth()` estaba en el camino crítico: si algo falla dentro, la
+autenticación queda inservible y la aplicación no abre.
+
+- Vuelve a **`getAuth()`**, el camino probado.
+- La persistencia se pide después con **`setPersistence()`, sin esperarla y
+  capturando el fallo**. Sigue importando en iOS —sin ella la sesión se
+  pierde al cerrar la aplicación—, pero una sesión que dura poco es
+  preferible a una aplicación que no abre.
+- **2 pruebas** que fijan esta decisión: `initializeAuth()` no puede volver al
+  camino crítico, y el fallo de persistencia no puede propagarse.
+
+Total: **503** pruebas.
+
+### Lección aplicada
+
+Un cambio pensado para un caso concreto (el contenedor de iOS) se puso en el
+camino que usan todos. Las mejoras que dependen del entorno deben ser
+opcionales: se intentan, y si no se consiguen, la aplicación sigue.
+
 ## [0.4.0-alpha.20] — La aplicación en la pantalla de inicio de iOS
 
 En iOS, una aplicación añadida a la pantalla de inicio corre en un contenedor

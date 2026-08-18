@@ -106,3 +106,33 @@ test('el arranque tiene pantalla visible y captura promesas rechazadas', async (
   // dentro de una función async pasa inadvertido y la pantalla queda blanca.
   assert.match(html, /unhandledrejection/, 'debe capturar promesas rechazadas');
 });
+
+test('la autenticación usa getAuth(), no initializeAuth() como camino principal', async () => {
+  const source = await readFile('src/infrastructure/firebase/firebase-auth-provider.js', 'utf-8');
+
+  // initializeAuth() como camino principal rompió el arranque en iOS: si algo
+  // falla dentro, la autenticación queda inservible y la aplicación no abre.
+  // getAuth() es el camino probado; la persistencia se pide después.
+  assert.doesNotMatch(
+    source,
+    /auth\s*=\s*initializeAuth\(/,
+    'initializeAuth() no puede estar en el camino crítico del arranque',
+  );
+  assert.match(source, /getAuth\(app\)/, 'debe usar getAuth()');
+  assert.match(source, /setPersistence\(/, 'y pedir la persistencia aparte');
+});
+
+test('el fallo al fijar la persistencia no puede propagarse y tumbar el arranque', async () => {
+  const source = await readFile('src/infrastructure/firebase/firebase-auth-provider.js', 'utf-8');
+
+  const persistenceBlock = source.slice(
+    source.indexOf('setPersistence('),
+    source.indexOf('if (config.useEmulator)'),
+  );
+  assert.match(persistenceBlock, /\.catch\(/, 'debe capturar el fallo, no dejarlo propagarse');
+  assert.doesNotMatch(
+    persistenceBlock,
+    /await\s+setPersistence/,
+    'no debe esperarse: una sesión que dura poco es mejor que una aplicación que no abre',
+  );
+});
