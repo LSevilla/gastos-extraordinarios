@@ -18,6 +18,28 @@
 
     <!-- Módulos ES nativos, sin build step (ADR-002). El navegador ejecuta
          exactamente este archivo, sin transformación previa. -->
+    <script>
+      // Red de seguridad: si un módulo falla al cargarse, la página queda en
+      // blanco sin decir nada — el manejador de errores de app.js ni siquiera
+      // llega a existir. Esto lo captura ANTES y muestra la causa, en vez de
+      // dejar a la persona mirando una pantalla vacía.
+      window.addEventListener('error', (event) => {
+        const root = document.getElementById('app');
+        if (!root || root.dataset.errorShown === 'true') return;
+        root.dataset.errorShown = 'true';
+        const detail = event.message || String(event.error || 'error desconocido');
+        const source = event.filename ? `\n\nArchivo: ${event.filename}:${event.lineno}` : '';
+        root.innerHTML =
+          '<div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;padding:28px 20px;line-height:1.55">' +
+          '<h1 style="font-size:1.25rem">La aplicación no pudo cargar</h1>' +
+          '<p style="color:#475467">Prueba a reparar la copia guardada en este dispositivo. Tus datos no se borran.</p>' +
+          '<p><a href="./reset.html" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#1e5aa8;color:#fff;text-decoration:none;font-weight:600">Reparar la aplicación</a></p>' +
+          '<p style="color:#667085;font-size:.85rem;margin-top:24px">Detalle técnico:</p>' +
+          '<pre style="background:#f1f3f7;padding:12px;border-radius:8px;font-size:.75rem;white-space:pre-wrap">' +
+          String(detail + source).replace(/</g, '&lt;') +
+          '</pre></div>';
+      });
+    </script>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

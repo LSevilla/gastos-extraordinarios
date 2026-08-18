@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reparar la aplicación — Aporte Compartido</title>
+    <!--
+      Página de emergencia. Deliberadamente NO carga ningún módulo de la
+      aplicación ni depende del Service Worker: si algo de eso estuviera roto,
+      esta página también lo estaría, que es justo cuando hace falta.
+
+      Sirve para el caso en que el Service Worker queda con una copia
+      inservible en caché. Como la estrategia es "caché primero", un archivo
+      ya guardado no se vuelve a pedir a la red nunca, así que recargar no
+      alcanza: hay que desinstalarlo.
+
+      IMPORTANTE: no toca IndexedDB. Los gastos, reembolsos y liquidaciones
+      guardados en este dispositivo quedan intactos.
+    -->
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        max-width: 620px;
+        margin: 0 auto;
+        padding: 32px 20px;
+        line-height: 1.55;
+        color: #1a1f2e;
+        background: #f7f8fa;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin-bottom: 8px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e3e8ef;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        padding: 14px 20px;
+        border-radius: 8px;
+        border: none;
+        background: #1e5aa8;
+        color: #fff;
+        cursor: pointer;
+        width: 100%;
+      }
+      button:disabled {
+        opacity: 0.6;
+      }
+      a.btn {
+        display: block;
+        text-align: center;
+        padding: 14px 20px;
+        border-radius: 8px;
+        background: #1e5aa8;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      #log {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+        background: #f1f3f7;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 12px;
+      }
+      .muted {
+        color: #667085;
+        font-size: 0.9rem;
+      }
+      .ok {
+        color: #065f46;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Reparar la aplicación</h1>
+    <p class="muted">
+      Usa esta página si la aplicación queda en blanco o no carga. Elimina la copia guardada en este
+      dispositivo y la vuelve a descargar. <strong>Tus datos no se borran.</strong>
+    </p>
+
+    <div class="card">
+      <button id="fix">Reparar ahora</button>
+      <div id="log"></div>
+    </div>
+
+    <div class="card" id="done" style="display: none">
+      <p class="ok">Listo. Abre la aplicación de nuevo.</p>
+      <a class="btn" href="./index.html">Abrir la aplicación</a>
+    </div>
+
+    <script>
+      const log = document.getElementById('log');
+      const write = (text) => {
+        log.textContent += text + '\n';
+      };
+
+      document.getElementById('fix').addEventListener('click', async () => {
+        const button = document.getElementById('fix');
+        button.disabled = true;
+        log.textContent = '';
+
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            write(`Service Workers instalados: ${registrations.length}`);
+            for (const registration of registrations) {
+              await registration.unregister();
+              write('  → desinstalado');
+            }
+          } else {
+            write('Este navegador no usa Service Workers.');
+          }
+
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            write(`Cachés guardadas: ${keys.length}`);
+            for (const key of keys) {
+              await caches.delete(key);
+              write(`  → borrada: ${key}`);
+            }
+          }
+
+          write('');
+          write('Reparación completada.');
+          document.getElementById('done').style.display = 'block';
+        } catch (error) {
+          write('Error durante la reparación: ' + error);
+          write('Prueba a borrar los datos del sitio desde los ajustes del navegador.');
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -56,7 +56,7 @@ async function main() {
   if (existsSync(DIST)) await rm(DIST, { recursive: true });
   await mkdir(DIST);
 
-  for (const entry of ['src', 'public', 'css', 'index.html', 'manifest.json']) {
+  for (const entry of ['src', 'public', 'css', 'index.html', 'manifest.json', 'reset.html']) {
     if (existsSync(entry)) await cp(entry, `${DIST}/${entry}`, { recursive: true });
   }
 

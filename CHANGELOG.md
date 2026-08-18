@@ -2,6 +2,38 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.16] — Herramientas para diagnosticar la pantalla en blanco
+
+La corrección anterior arregló una causa real (la lista del Service Worker
+estaba incompleta), pero la pantalla en blanco persiste en el dispositivo
+afectado. Verificado sobre el código publicado: la sintaxis de los 120
+módulos es correcta, las importaciones resuelven a símbolos que existen, y
+los módulos de presentación e infraestructura cargan sin error.
+
+Como el fallo no se reproduce en el código, este build deja de adivinar y
+agrega lo necesario para verlo.
+
+### Agregado
+
+- **`reset.html`**: página de emergencia que desinstala el Service Worker y
+  borra las cachés. No carga ningún módulo de la aplicación ni depende del
+  Service Worker — si eso estuviera roto, la página también lo estaría, que
+  es justo cuando hace falta. **No toca IndexedDB**: los datos guardados en
+  el dispositivo quedan intactos.
+- **Captura de errores en `index.html`**, antes de cargar los módulos. Si uno
+  falla, la página muestra el mensaje y el archivo que lo provocó, más un
+  acceso directo a la reparación, en vez de quedarse en blanco. El manejador
+  de `app.js` no servía para esto: un fallo al cargar los módulos ocurre
+  antes de que ese código exista.
+
+### Por qué era necesario
+
+La estrategia del Service Worker es "caché primero": un archivo ya guardado
+no se vuelve a pedir a la red. Recargar no basta para reemplazar una copia
+inservible, y sin un mensaje en pantalla no hay forma de saber qué falló.
+
+Total: **490** pruebas.
+
 ## [0.4.0-alpha.15] — Pantalla en blanco: el Service Worker no llegaba a instalarse
 
 ### Corregido
