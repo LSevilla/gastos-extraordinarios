@@ -2,6 +2,47 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.15] — Pantalla en blanco: el Service Worker no llegaba a instalarse
+
+### Corregido
+
+**La lista de archivos que precachea el Service Worker estaba escrita a mano
+y se quedó congelada en el Build 1.3.** Faltaban 25 módulos: todos los
+agregados desde reembolsos en adelante — liquidaciones, sincronización,
+perfil, ventanas, visor de comprobantes.
+
+Como `cache.addAll()` es atómico —si un solo archivo no responde, rechaza
+entero—, el Service Worker no llegaba a instalarse y la aplicación quedaba
+en pantalla blanca.
+
+Este defecto se venía acumulando build tras build sin manifestarse, porque
+el navegador seguía sirviendo una caché anterior que sí funcionaba.
+
+Dos correcciones, en distinto nivel:
+
+- **La lista ahora se genera automáticamente en el build**, recorriendo
+  `src/` y `css/`. Elimina la clase entera de error: es imposible olvidarse
+  de un archivo que existe. El build falla si no consigue reemplazarla, en
+  vez de publicar en silencio una lista obsoleta.
+- **El Service Worker cachea archivo por archivo**, no con `addAll()`. Un
+  fallo puntual de red durante la instalación ahora degrada el
+  funcionamiento sin conexión —y lo advierte por consola— en vez de impedir
+  usar la aplicación.
+
+### Agregado
+
+- **3 pruebas** que impiden la reaparición del defecto: verifican que el
+  Service Worker publicado cubra todos los módulos de `src/`, que no se use
+  `addAll()`, y que la lista del repositorio siga siendo un marcador y no una
+  lista mantenida a mano.
+
+Total: **490** pruebas.
+
+### Sigue pendiente
+
+- La pantalla para resolver conflictos.
+- Los archivos adjuntos no se sincronizan: solo viajan sus metadatos.
+
 ## [0.4.0-alpha.14] — El arranque se quedaba colgado en "Ingresando…"
 
 ### Corregido

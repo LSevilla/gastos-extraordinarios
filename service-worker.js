@@ -130,7 +130,34 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then(async (cache) => {
+        // Se cachea archivo por archivo en vez de con `addAll()`.
+        //
+        // `addAll()` es atómico: si UN solo archivo no responde, rechaza
+        // entero y el Service Worker no se instala — y la aplicación queda
+        // en pantalla blanca. Eso ocurrió de verdad cuando la lista quedó
+        // desactualizada respecto de los módulos reales.
+        //
+        // La lista ahora se genera automáticamente en el build, así que ese
+        // desajuste no debería repetirse; esto es la segunda línea de
+        // defensa, para que un fallo puntual de red durante la instalación
+        // degrade el funcionamiento sin conexión en vez de impedir usar la
+        // aplicación.
+        const failed = [];
+        await Promise.all(
+          APP_SHELL.map((url) =>
+            cache.add(url).catch(() => {
+              failed.push(url);
+            }),
+          ),
+        );
+        if (failed.length > 0) {
+          console.warn(
+            `[SW] ${failed.length} archivo(s) no se pudieron cachear. La aplicación funciona, pero el modo sin conexión puede estar incompleto:`,
+            failed,
+          );
+        }
+      })
       .then(() => self.skipWaiting()),
   );
 });
