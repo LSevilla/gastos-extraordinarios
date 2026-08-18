@@ -2,6 +2,36 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.24] — Documento bloqueado en iOS y fila ilegible en móvil
+
+### Corregido
+
+- **El documento no se abría en el teléfono.** Safari en iOS solo permite
+  abrir una ventana si `window.open()` ocurre dentro del gesto de la persona.
+  El código la abría DESPUÉS de esperar los datos de la liquidación, y ese
+  `await` rompe el vínculo con el toque: el navegador la bloqueaba como
+  emergente no solicitada.
+
+  Ahora la ventana se **reserva primero** —dentro del gesto, mostrando
+  "Preparando el documento…"— y se llena cuando los datos llegan. Si la
+  persona la cierra mientras espera, escribir en ella no falla.
+
+- **La fila del historial de liquidaciones quedaba ilegible en móvil**: el
+  texto se comprimía en una columna de una palabra por línea y un botón se
+  salía de la pantalla. Dependía de que el texto fuera el primer elemento de
+  la fila para ocupar el ancho completo, y con dos botones al lado eso no se
+  cumplía. Ahora la estructura es explícita —bloque de texto y bloque de
+  acciones— con una clase propia que apila en móvil y vuelve a una línea
+  cuando hay espacio.
+
+### Agregado
+
+- **2 pruebas**: que la ventana se reserva antes de cualquier `await` (el
+  orden es lo que decide si iOS la bloquea), y que reservar y escribir están
+  separados.
+
+Total: **508** pruebas.
+
 ## [0.4.0-alpha.23] — Los gastos se subían incompletos
 
 ### Corregido

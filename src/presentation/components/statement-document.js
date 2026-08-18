@@ -224,20 +224,57 @@ ${
 }
 
 /**
- * Abre el documento en una ventana nueva.
+ * Reserva una ventana nueva AHORA, para llenarla después.
+ *
+ * Safari en iOS solo permite abrir una ventana si `window.open()` ocurre
+ * dentro del gesto de la persona. Cualquier `await` previo —leer datos,
+ * calcular el documento— rompe ese vínculo y el navegador la bloquea como
+ * emergente no solicitada. Por eso el orden importa: primero se reserva la
+ * ventana, y solo después se busca el contenido.
+ *
+ * @returns {Window|null} null si el navegador la bloqueó de todos modos
+ */
+export function reserveDocumentWindow() {
+  const win = window.open('', '_blank');
+  if (!win) return null;
+  // Mensaje mientras se prepara el contenido: la ventana queda visible de
+  // inmediato y en blanco, y sin esto parece que falló.
+  win.document.write(
+    '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Preparando el documento…</title></head>' +
+      '<body style="font-family:system-ui,sans-serif;padding:40px;text-align:center;color:#475467">' +
+      'Preparando el documento…</body></html>',
+  );
+  return win;
+}
+
+/**
+ * Escribe el documento en una ventana ya reservada.
  *
  * No llama a `print()` automáticamente: el documento se abre con un botón
  * visible para hacerlo. Abrir el diálogo de impresión sin avisar es
  * desconcertante, sobre todo en un teléfono, y además impide simplemente
  * leer o copiar el contenido sin imprimirlo.
  *
+ * @param {Window|null} win
  * @param {string} html
- * @returns {boolean} false si el navegador bloqueó la ventana emergente
+ * @returns {boolean} false si no hay ventana donde escribir
  */
-export function openStatementDocument(html) {
-  const win = window.open('', '_blank', 'width=980,height=800');
-  if (!win) return false;
+export function writeDocumentToWindow(win, html) {
+  if (!win || win.closed) return false;
+  win.document.open();
   win.document.write(html);
   win.document.close();
   return true;
+}
+
+/**
+ * Camino directo, cuando el contenido ya está listo y no hay que esperar
+ * nada: reserva y escribe en el mismo gesto.
+ *
+ * @param {string} html
+ * @returns {boolean} false si el navegador bloqueó la ventana
+ */
+export function openStatementDocument(html) {
+  const win = reserveDocumentWindow();
+  return writeDocumentToWindow(win, html);
 }

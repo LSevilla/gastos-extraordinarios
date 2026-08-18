@@ -142,6 +142,15 @@ button:focus-visible,
   border-radius: var(--radius-button);
   border: var(--border-width) solid transparent;
   cursor: pointer;
+  /* Una etiqueta larga debe partirse en dos líneas dentro del botón, no
+     estirarlo más allá del ancho de la pantalla ni quedar cortada. El
+     `min-height` ya garantiza el objetivo táctil; el alto crece si hace
+     falta. */
+  text-align: center;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  height: auto;
 }
 .btn-primary {
   background: var(--color-primario);
@@ -330,14 +339,49 @@ button:focus-visible,
 }
 
 /* ---- Beneficiarios: filas activo/inactivo ---- */
+/* Fila con contenido y acciones. Móvil primero: se APILA.
+   Estaba en una sola línea horizontal sin permitir salto, pensada para
+   escritorio. Con textos largos y dos botones, en un teléfono el texto
+   quedaba comprimido a una palabra por línea y los botones se desbordaban
+   fuera de la pantalla. */
 .beneficiary-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3);
   border: var(--border-width) solid var(--color-borde);
   border-radius: var(--radius-button);
+  /* Permitir el salto de línea es lo que arregla el móvil: antes la fila
+     forzaba texto y botones en una sola línea, así que el texto quedaba
+     comprimido a una palabra por línea y los botones se desbordaban fuera
+     de la pantalla. */
+  flex-wrap: wrap;
+  /* Un identificador largo sin espacios debe cortarse, no estirar la fila. */
+  overflow-wrap: anywhere;
+}
+/* El contenido toma la línea completa y empuja las acciones abajo, donde
+   caben lado a lado. `min-width: 0` es necesario: sin él, el contenido se
+   niega a encogerse por debajo de su ancho natural y el desbordamiento
+   vuelve. */
+.beneficiary-row > :first-child {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.beneficiary-row > .btn,
+.beneficiary-row > form {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Con espacio suficiente, vuelve a una sola línea: contenido a la izquierda,
+   acciones a la derecha. */
+@media (min-width: 560px) {
+  .beneficiary-row > :first-child {
+    flex: 1 1 auto;
+  }
+  .beneficiary-row > .btn,
+  .beneficiary-row > form {
+    flex: 0 0 auto;
+  }
 }
 .beneficiary-row.is-inactive {
   opacity: 0.65;
@@ -620,4 +664,50 @@ body.has-modal-open {
   font-size: inherit;
   color: inherit;
   font-weight: 600;
+}
+
+/* ---- Fila apilada: texto arriba, acciones abajo ----
+   Estructura explícita en vez de depender de `:first-child`. La versión
+   anterior confiaba en que el bloque de texto fuera el primer elemento para
+   ocupar el ancho completo en móvil; con dos botones al lado, el texto
+   terminaba comprimido en una columna de una palabra por línea. */
+.stacked-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-borde);
+  border-radius: var(--radius-button);
+  overflow-wrap: anywhere;
+}
+.stacked-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.stacked-row__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.stacked-row__actions .btn {
+  flex: 1 1 auto;
+}
+.stacked-row.is-inactive {
+  opacity: 0.65;
+}
+/* Con espacio suficiente, texto e acciones vuelven a convivir en una línea. */
+@media (min-width: 560px) {
+  .stacked-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .stacked-row__info {
+    flex: 1 1 auto;
+  }
+  .stacked-row__actions .btn {
+    flex: 0 0 auto;
+  }
 }

@@ -18,6 +18,8 @@ import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js
 import {
   buildStatementDocumentHtml,
   openStatementDocument,
+  reserveDocumentWindow,
+  writeDocumentToWindow,
 } from '../components/statement-document.js';
 
 /**
@@ -155,7 +157,9 @@ export async function renderAccountStatement(root, deps) {
     const documentButton = document.createElement('button');
     documentButton.type = 'button';
     documentButton.className = 'btn btn-secondary btn-block';
-    documentButton.textContent = 'Generar documento para compartir';
+    // Etiqueta corta: en un teléfono, un texto largo dentro del botón lo
+    // parte en varias líneas y ensucia la tarjeta.
+    documentButton.textContent = 'Generar documento';
     documentButton.addEventListener('click', () => openProvisionalDocument(statement));
     card.appendChild(documentButton);
 
@@ -231,11 +235,23 @@ export async function renderAccountStatement(root, deps) {
    * @param {import('../../domain/settlements/settlement.js').Settlement} settlement
    */
   async function openDefinitiveDocument(settlement) {
+    // La ventana se reserva ANTES de pedir los datos. Safari en iOS solo la
+    // permite dentro del gesto de la persona: si se abriera después del
+    // `await` de abajo, la bloquearía como emergente no solicitada.
+    const win = reserveDocumentWindow();
+    if (!win) {
+      showToast(
+        'Tu navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio e intenta de nuevo.',
+      );
+      return;
+    }
+
     const detailResult = await deps.accountStatementService.getSettlementDetail(
       settlement.id,
       deps.actorUserId,
     );
     if (detailResult.isFailure()) {
+      win.close();
       showToast('No se pudo abrir el detalle de la liquidación.');
       return;
     }
@@ -274,11 +290,8 @@ export async function renderAccountStatement(root, deps) {
         : null,
       ...sharedDocumentFields(lines),
     });
-    if (!openStatementDocument(html)) {
-      showToast(
-        'Tu navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio.',
-      );
-    }
+    // La ventana ya está abierta desde el gesto: solo se escribe en ella.
+    writeDocumentToWindow(win, html);
   }
 
   /** @param {import('../../domain/account-statements/account-statement-calculator.js').AccountStatement} statement */
@@ -411,26 +424,36 @@ export async function renderAccountStatement(root, deps) {
     list.className = 'stack-tight';
     settlements.forEach((settlement) => {
       const row = document.createElement('div');
-      row.className = `beneficiary-row${settlement.isDeleted() ? ' is-inactive' : ''}`;
+      row.className = `stacked-row${settlement.isDeleted() ? ' is-inactive' : ''}`;
       const balanceLine =
         settlement.balanceAmount.getAmount() === 0
           ? 'Saldo cero'
           : `${participantName(settlement.debtorParticipantId)} debía ${money(settlement.balanceAmount.getAmount())}`;
-      row.innerHTML = `
-        <span class="body-text">
+      // Estructura explícita: un bloque de texto y un bloque de acciones. La
+      // versión anterior dependía de que el texto fuera el primer elemento
+      // para ocupar el ancho completo en móvil, y con dos botones al lado el
+      // texto terminaba estrujado en una columna de una palabra por línea.
+      const info = document.createElement('div');
+      info.className = 'stacked-row__info';
+      info.innerHTML = `
+        <p class="body-text">
           ${settlement.periodStart.toLocaleDateString('es-CL')} — ${settlement.periodEnd.toLocaleDateString('es-CL')}
-          ${settlement.isDeleted() ? '<span class="badge-inactive">Anulada</span>' : ''}<br />
-          <span class="muted-text">${settlement.expenseCount} gasto${settlement.expenseCount === 1 ? '' : 's'} · Neto ${money(settlement.totalNet.getAmount())} · ${escapeHtml(balanceLine)}</span>
-          ${settlement.isDeleted() ? `<br /><span class="muted-text">Motivo: ${escapeHtml(settlement.cancellationReason ?? '')}</span>` : ''}
-        </span>
+          ${settlement.isDeleted() ? '<span class="badge-inactive">Anulada</span>' : ''}
+        </p>
+        <p class="muted-text">${settlement.expenseCount} gasto${settlement.expenseCount === 1 ? '' : 's'} · Neto ${money(settlement.totalNet.getAmount())}</p>
+        <p class="muted-text">${escapeHtml(balanceLine)}</p>
+        ${settlement.isDeleted() ? `<p class="muted-text">Motivo: ${escapeHtml(settlement.cancellationReason ?? '')}</p>` : ''}
       `;
+      const actions = document.createElement('div');
+      actions.className = 'stacked-row__actions';
+      row.append(info, actions);
       if (!settlement.isDeleted()) {
         const documentButton = document.createElement('button');
         documentButton.type = 'button';
         documentButton.className = 'btn btn-secondary';
         documentButton.textContent = 'Documento';
         documentButton.addEventListener('click', () => openDefinitiveDocument(settlement));
-        row.appendChild(documentButton);
+        actions.appendChild(documentButton);
       }
       if (deps.canWrite && !settlement.isDeleted()) {
         const cancelButton = document.createElement('button');
@@ -438,7 +461,7 @@ export async function renderAccountStatement(root, deps) {
         cancelButton.className = 'btn btn-secondary';
         cancelButton.textContent = 'Anular';
         cancelButton.addEventListener('click', () => openCancelSettlementModal(settlement));
-        row.appendChild(cancelButton);
+        actions.appendChild(cancelButton);
       }
       list.appendChild(row);
     });

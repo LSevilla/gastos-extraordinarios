@@ -171,3 +171,31 @@ test('el documento es HTML completo y autocontenido, listo para abrir en otra ve
   assert.match(html, /@media print/, 'debe traer reglas de impresión');
   assert.match(html, /window\.print\(\)/, 'y el botón para guardar como PDF');
 });
+
+test('la ventana se reserva ANTES de esperar datos: Safari en iOS la bloquea si no', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile('src/presentation/views/account-statement-view.js', 'utf-8');
+
+  const fn = source.slice(
+    source.indexOf('async function openDefinitiveDocument'),
+    source.indexOf('function renderHistoryCard'),
+  );
+  const reserveAt = fn.indexOf('reserveDocumentWindow()');
+  const firstAwait = fn.indexOf('await ');
+
+  assert.ok(reserveAt > -1, 'debe reservar la ventana');
+  assert.ok(
+    reserveAt < firstAwait,
+    'window.open() debe ocurrir dentro del gesto de la persona: cualquier await previo rompe ese vínculo y iOS bloquea la ventana',
+  );
+});
+
+test('reservar y escribir están separados, para poder llenar la ventana después', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile('src/presentation/components/statement-document.js', 'utf-8');
+
+  assert.match(source, /export function reserveDocumentWindow/);
+  assert.match(source, /export function writeDocumentToWindow/);
+  // Escribir en una ventana que la persona cerró mientras esperaba no puede lanzar.
+  assert.match(source, /win\.closed/);
+});
