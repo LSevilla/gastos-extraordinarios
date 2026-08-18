@@ -269,6 +269,10 @@ export class SyncEngine {
       paidByParticipantId: expense.paidByParticipantId.toString(),
       expectedReimbursement: expense.expectedReimbursement,
       documentStatus: expense.documentStatus,
+      // Se subía todo el gasto MENOS esto. Al descargarlo en otro
+      // dispositivo el campo no existía y la lectura reventaba al recorrerlo.
+      documentIds: expense.documentIds.map((id) => id.toString()),
+      percentagePeriodId: expense.percentagePeriodId ? expense.percentagePeriodId.toString() : null,
       notes: expense.notes,
       createdAt: expense.createdAt.toISOString(),
       updatedAt: expense.updatedAt.toISOString(),
@@ -298,6 +302,8 @@ export class SyncEngine {
       currency: reimbursement.amount.getCurrency(),
       receivedAt: reimbursement.receivedAt.toISOString(),
       receivedByParticipantId: reimbursement.receivedByParticipantId.toString(),
+      // Mismo defecto que en Expense: se subía todo menos esto.
+      documentIds: reimbursement.documentIds.map((id) => id.toString()),
       notes: reimbursement.notes,
       createdAt: reimbursement.createdAt.toISOString(),
       updatedAt: reimbursement.updatedAt.toISOString(),

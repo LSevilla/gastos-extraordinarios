@@ -2,6 +2,34 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.23] — Los gastos se subían incompletos
+
+### Corregido
+
+`undefined is not an object (evaluating 'record.documentIds.map')`.
+
+**Un gasto se subía a Firestore sin su campo `documentIds`**, y también sin
+`percentagePeriodId`. Al descargarlo en otro dispositivo esos campos no
+existían, y la lectura reventaba al recorrer la lista de comprobantes. En el
+computador no ocurría porque ahí los gastos son los originales, con todos sus
+campos.
+
+El mismo defecto estaba en los reembolsos.
+
+- **La subida ahora incluye `documentIds` y `percentagePeriodId`** en gastos,
+  y `documentIds` en reembolsos. Sin el tramo congelado, además, un gasto
+  descargado no se podía repartir.
+- **La lectura de gastos tolera campos ausentes** (`documentIds`, `notes`,
+  `expectedReimbursement`). Reembolsos y liquidaciones ya lo hacían.
+
+### Agregado
+
+- **3 pruebas** contra esta clase de error —"lo que se sube no coincide con
+  lo que se lee"—: verifican que la subida incluya los campos que la lectura
+  espera, y que ningún repositorio recorra una lista sin valor por defecto.
+
+Total: **506** pruebas.
+
 ## [0.4.0-alpha.22] — Fallo al abrir opciones del menú
 
 ### Corregido
