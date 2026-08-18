@@ -35,7 +35,7 @@ export const ACTIONS = [
     label: 'Registrar un pago',
     icon: 'payment',
     help: 'Registra el depósito o transferencia asociado a un estado de cuenta.',
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'statement',

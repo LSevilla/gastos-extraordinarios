@@ -22,6 +22,7 @@ const SETTLEMENTS_COLLECTION = 'settlements';
 // asumir que siempre hay dos participantes.
 const PARTICIPANTS_COLLECTION = 'participants';
 const BENEFICIARIES_COLLECTION = 'beneficiaries';
+const PAYMENTS_COLLECTION = 'payments';
 
 export class SyncEngine {
   /**
@@ -33,6 +34,7 @@ export class SyncEngine {
    *   settlementRepo?: import('../../domain/settlements/settlement-repository.js').SettlementRepository,
    *   participantRepo?: import('../../domain/participants/participant-repository.js').ParticipantRepository,
    *   beneficiaryRepo?: import('../../domain/beneficiaries/beneficiary-repository.js').BeneficiaryRepository,
+   *   paymentRepo?: import('../../domain/payments/payment-repository.js').PaymentRepository,
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
@@ -134,6 +136,19 @@ export class SyncEngine {
   }
 
   /**
+   * @param {Identifier} paymentId
+   */
+  async enqueuePaymentSync(paymentId) {
+    await this.deps.operationQueueRepo.save(
+      OperationQueueEntry.create(
+        'sync:payment',
+        { paymentId: paymentId.toString() },
+        this.deps.clock,
+      ),
+    );
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.
@@ -179,6 +194,16 @@ export class SyncEngine {
             findById: (id) => this.deps.settlementRepo.findById(id),
             push: (entity) => this.#pushSettlementToFirestore(entity),
             logLabel: 'sync:settlement',
+          },
+        );
+      } else if (entry.type === 'sync:payment') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.paymentId).getValue(),
+          {
+            findById: (id) => this.deps.paymentRepo.findById(id),
+            push: (entity) => this.#pushPaymentToFirestore(entity),
+            logLabel: 'sync:payment',
           },
         );
       } else if (entry.type === 'sync:participant') {
@@ -380,6 +405,52 @@ export class SyncEngine {
       createdAt: beneficiary.createdAt.toISOString(),
       updatedAt: beneficiary.updatedAt.toISOString(),
     });
+  }
+
+  /**
+   * @param {import('../../domain/payments/payment.js').Payment} payment
+   */
+  async #pushPaymentToFirestore(payment) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    await fs.setDoc(fs.doc(firestore, PAYMENTS_COLLECTION, payment.id.toString()), {
+      caseId: payment.caseId.toString(),
+      settlementId: payment.settlementId ? payment.settlementId.toString() : null,
+      paidByParticipantId: payment.paidByParticipantId.toString(),
+      receivedByParticipantId: payment.receivedByParticipantId.toString(),
+      amount: payment.amount.getAmount(),
+      currency: payment.amount.getCurrency(),
+      paidAt: payment.paidAt.toISOString(),
+      method: payment.method,
+      reference: payment.reference,
+      notes: payment.notes,
+      documentIds: payment.documentIds.map((id) => id.toString()),
+      createdAt: payment.createdAt.toISOString(),
+      updatedAt: payment.updatedAt.toISOString(),
+      deletedAt: payment.deletedAt ? payment.deletedAt.toISOString() : null,
+      createdByUserId: payment.createdByUserId,
+      updatedByUserId: payment.updatedByUserId,
+      cancelledByUserId: payment.cancelledByUserId,
+      cancellationReason: payment.cancellationReason,
+    });
+  }
+
+  /**
+   * Escucha cambios remotos sobre los pagos de un caso.
+   * @param {Identifier} caseId
+   * @param {(remoteData: object, paymentId: string) => Promise<void>} onRemoteChange
+   * @returns {() => void}
+   */
+  listenForRemotePaymentChanges(caseId, onRemoteChange) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const paymentsQuery = fs.query(
+      fs.collection(firestore, PAYMENTS_COLLECTION),
+      fs.where('caseId', '==', caseId.toString()),
+    );
+    const unsubscribe = fs.onSnapshot(paymentsQuery, (querySnap) => {
+      querySnap.docs.forEach((docSnap) => onRemoteChange(docSnap.data(), docSnap.id));
+    });
+    this.unsubscribers.push(unsubscribe);
+    return unsubscribe;
   }
 
   /**

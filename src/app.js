@@ -36,6 +36,10 @@ import { SyncingReimbursementRepository } from './infrastructure/synchronization
 import { SyncingSettlementRepository } from './infrastructure/synchronization/syncing-settlement-repository.js';
 import { SyncingParticipantRepository } from './infrastructure/synchronization/syncing-participant-repository.js';
 import { SyncingBeneficiaryRepository } from './infrastructure/synchronization/syncing-beneficiary-repository.js';
+import { SyncingPaymentRepository } from './infrastructure/synchronization/syncing-payment-repository.js';
+import { IndexedDbPaymentRepository } from './infrastructure/indexeddb/repositories/indexeddb-payment-repository.js';
+import { PaymentService } from './application/services/payment-service.js';
+import { renderPayments } from './presentation/views/payments-view.js';
 import { SyncCoordinator } from './infrastructure/synchronization/sync-coordinator.js';
 import { RemoteChangeApplier } from './infrastructure/synchronization/remote-change-applier.js';
 import { IndexedDbSyncStateRepository } from './infrastructure/indexeddb/repositories/indexeddb-sync-state-repository.js';
@@ -143,6 +147,7 @@ async function main() {
   const rawReimbursementRepo = new IndexedDbReimbursementRepository(db);
   const rawSettlementRepo = new IndexedDbSettlementRepository(db);
   const syncStateRepo = new IndexedDbSyncStateRepository(db);
+  const rawPaymentRepo = new IndexedDbPaymentRepository(db);
 
   // ADR-017: Firestore se inicializa una sola vez (firebase-app.js) y se
   // comparte entre AuthProvider y el motor de sincronización.
@@ -161,6 +166,7 @@ async function main() {
     settlementRepo: rawSettlementRepo,
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
+    paymentRepo: rawPaymentRepo,
     firestore,
     firestoreModule,
     clock,
@@ -200,6 +206,12 @@ async function main() {
   const beneficiaryRepo = new SyncingBeneficiaryRepository({
     inner: rawBeneficiaryRepo,
     syncEngine,
+  });
+  const paymentRepo = new SyncingPaymentRepository({
+    inner: rawPaymentRepo,
+    syncEngine,
+    operationQueueRepo,
+    clock,
   });
 
   // Cierra el circuito de sincronización: hasta ahora la aplicación sabía
@@ -266,6 +278,8 @@ async function main() {
         // Build 1.7 — liquidar escribe la liquidación y todos sus gastos
         // en un único commit: o queda todo, o no queda nada.
         STORE_NAMES.SETTLEMENTS,
+        // Build 1.8 — registrar un pago con su comprobante en un solo commit.
+        STORE_NAMES.PAYMENTS,
       ],
       'readwrite',
       work,
@@ -340,6 +354,7 @@ async function main() {
     caseMembersLoader: syncEngine,
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
+    paymentRepo: rawPaymentRepo,
     clock,
   });
 
@@ -350,9 +365,22 @@ async function main() {
   const initialUploadService = new InitialUploadService({
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
+    paymentRepo: rawPaymentRepo,
     syncEngine,
     appSettingsRepo,
     clock,
+  });
+
+  const paymentService = new PaymentService({
+    paymentRepo,
+    settlementRepo,
+    participantRepo,
+    percentagePeriodRepo,
+    membershipRepo: caseMembershipRepo,
+    documentRepo,
+    documentService,
+    clock,
+    runAtomicWrite,
   });
 
   const authProvider = await withBootTimeout(
@@ -506,6 +534,17 @@ async function main() {
         onProfileUpdated: () => {},
         onBack: () => navigate('home'),
       });
+    } else if (view === 'payments') {
+      await renderPayments(root, {
+        paymentService,
+        accountStatementService,
+        caseEntity: summary.caseEntity,
+        participants: summary.participants,
+        currentParticipantId,
+        actorUserId: currentUserProfile.id,
+        canWrite: canWriteExpenses,
+        onBack: () => navigate('home'),
+      });
     } else if (view === 'accountStatement') {
       await renderAccountStatement(root, {
         accountStatementService,
@@ -563,6 +602,7 @@ async function main() {
           if (actionId === 'manageCase') navigate('manageCase');
           else if (actionId === 'expensesList') navigate('expensesList');
           else if (actionId === 'statement') navigate('accountStatement');
+          else if (actionId === 'payment') navigate('payments');
           else if (actionId === 'expense') {
             if (canWriteExpenses) navigate('registerExpense');
             else showToast('No tienes permiso para registrar gastos en este caso.');

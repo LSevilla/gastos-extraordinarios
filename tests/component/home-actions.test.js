@@ -23,11 +23,19 @@ test('existen exactamente las 7 acciones definidas, en el orden definido', () =>
   );
 });
 
-test('las acciones habilitadas son las seis con función real; solo pagos sigue pendiente', () => {
+test('todas las acciones del menú están habilitadas: el sistema quedó completo', () => {
   const enabled = ACTIONS.filter((a) => a.enabled).map((a) => a.id);
   assert.deepEqual(
     enabled.sort(),
-    ['document', 'expense', 'expensesList', 'manageCase', 'reimbursement', 'statement'].sort(),
+    [
+      'document',
+      'expense',
+      'expensesList',
+      'manageCase',
+      'payment',
+      'reimbursement',
+      'statement',
+    ].sort(),
   );
 });
 

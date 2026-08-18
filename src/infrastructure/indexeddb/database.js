@@ -5,7 +5,7 @@
 // beneficiaries, appSettings. v2 (Build 1.2): agrega expenses, documents,
 // documentBlobs — migración aditiva, no toca ningún store existente.
 export const DATABASE_NAME = 'gastos-extraordinarios-db';
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 
 export const STORE_NAMES = Object.freeze({
   CASES: 'cases',
@@ -24,6 +24,7 @@ export const STORE_NAMES = Object.freeze({
   SETTLEMENTS: 'settlements',
   SYNC_METADATA: 'syncMetadata',
   SYNC_CONFLICTS: 'syncConflicts',
+  PAYMENTS: 'payments',
 });
 
 /**
@@ -153,6 +154,18 @@ export function runMigrationV7(db) {
 }
 
 /**
+ * Build 1.8 — pagos. Aditiva, como todas las anteriores: un store nuevo y
+ * ningún cambio a los existentes.
+ * @param {IDBDatabase} db
+ */
+export function runMigrationV8(db) {
+  const payments = db.createObjectStore(STORE_NAMES.PAYMENTS, { keyPath: 'id' });
+  payments.createIndex('caseId', 'caseId');
+  payments.createIndex('settlementId', 'settlementId');
+  payments.createIndex('paidAt', 'paidAt');
+}
+
+/**
  * Abre (y si corresponde, crea/migra) la base de datos. Usa el `indexedDB`
  * global — en el navegador es el nativo; en pruebas, `fake-indexeddb` lo
  * reemplaza antes de importar este módulo (Development Handbook, Capítulo 9).
@@ -195,6 +208,9 @@ export function openDatabase(databaseName = DATABASE_NAME) {
       }
       if (event.oldVersion < 7) {
         runMigrationV7(db);
+      }
+      if (event.oldVersion < 8) {
+        runMigrationV8(db);
       }
     };
 

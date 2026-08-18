@@ -224,6 +224,29 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Pagos ----
+    // Build 1.8. `caseId`, quién paga y quién recibe son inmutables: cambiar
+    // la dirección de un pago ya registrado alteraría el saldo entre las dos
+    // partes sin dejar rastro. Corregir se hace anulando y registrando de
+    // nuevo. Sin borrado físico: borrar dinero que alguien declaró haber
+    // entregado sería la peor forma de perder la confianza.
+
+    function immutablePaymentFieldsUnchanged() {
+      let protectedKeys = ['caseId', 'paidByParticipantId', 'receivedByParticipantId', 'createdAt', 'createdByUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys) == false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn()
+        && canWrite(request.resource.data.caseId)
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && immutablePaymentFieldsUnchanged();
+      allow delete: if false;
+    }
+
     // ---- Invitaciones ----
 
     match /invitations/{invitationId} {

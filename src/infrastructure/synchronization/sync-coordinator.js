@@ -59,6 +59,9 @@ export class SyncCoordinator {
       this.deps.syncEngine.listenForRemoteSettlementChanges(caseId, (data, id) =>
         this.#applyRemote('settlement', id, data),
       ),
+      this.deps.syncEngine.listenForRemotePaymentChanges(caseId, (data, id) =>
+        this.#applyRemote('payment', id, data),
+      ),
     );
 
     // Reconexión y vuelta a primer plano: los dos momentos en que es más

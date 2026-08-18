@@ -44,6 +44,7 @@ export const COMPARABLE_FIELDS = Object.freeze({
   reimbursement: ['amount', 'institution', 'resolution', 'receivedAt', 'notes', 'deletedAt'],
   settlement: ['totalNet', 'balanceAmount', 'periodStart', 'periodEnd', 'deletedAt'],
   case: ['name', 'description', 'operationMode', 'deletedAt'],
+  payment: ['amount', 'paidAt', 'method', 'reference', 'settlementId', 'notes', 'deletedAt'],
 });
 
 const STORE_FOR_TYPE = Object.freeze({
@@ -51,6 +52,7 @@ const STORE_FOR_TYPE = Object.freeze({
   reimbursement: STORE_NAMES.REIMBURSEMENTS,
   settlement: STORE_NAMES.SETTLEMENTS,
   case: STORE_NAMES.CASES,
+  payment: STORE_NAMES.PAYMENTS,
 });
 
 export class RemoteChangeApplier {

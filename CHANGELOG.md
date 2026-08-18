@@ -2,6 +2,59 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.1] — Build 1.8: Registrar un pago
+
+Cierra el ciclo completo del sistema: **gastos → reembolsos → liquidación →
+pago**. Todas las acciones del menú principal quedan habilitadas.
+
+Hasta ahora la aplicación sabía cuánta deuda se había generado. Ahora responde
+la pregunta que de verdad importa: **cuánto queda por pagar**.
+
+### Agregado
+
+- **Dominio `Payment`**: monto, fecha, quién paga y quién recibe (siempre
+  explícitos y distintos), medio de pago de catálogo cerrado (transferencia,
+  efectivo, depósito, otro), número de operación, notas, comprobante opcional
+  y anulación lógica con motivo.
+- **Dos formas de pago, según lo aprobado**: imputado a una liquidación
+  concreta —y la aplicación dice cuánto falta para saldarla— o **abono libre**
+  que reduce el saldo general.
+- **`calculateCaseBalance()`** (función pura): acumula deudas y pagos en un
+  único eje con signo y los compensa. Es lo que permite que liquidaciones en
+  direcciones opuestas —un mes debe uno, otro mes el otro— y pagos en
+  cualquier sentido produzcan un saldo único y correcto.
+- **`PaymentService`** con permisos por membresía real del caso.
+- **Migración IndexedDB v7→v8**, aditiva: store `payments`.
+- **`sync:payment`** con su procesador, escucha de cambios remotos y reglas de
+  Firestore con `allow delete: if false`.
+- **Pantalla de pagos**: saldo actual en lenguaje directo, desglose por
+  liquidación con lo que falta de cada una, historial completo y registro.
+- **33 pruebas nuevas** (12 del dominio, 12 del cálculo del saldo, 8 del
+  servicio, 1 de migración). Total: **541**.
+
+### Decisiones aplicadas
+
+- **Un pago mayor a la deuda invierte quién debe**, en vez de recortarse a
+  cero. El exceso es un dato real que hay que ver.
+- **Un pago en dirección contraria a la deuda la aumenta.** Es dinero que fue
+  en el sentido equivocado; reflejarlo es más honesto que ignorarlo.
+- **Quien recibe se deduce automáticamente**: con dos participantes no hay
+  ambigüedad, y pedirlo sería un campo más que llenar.
+- **No se puede imputar un pago a una liquidación anulada**: quedaría colgando
+  de algo que ya no cuenta.
+- **`caseId`, quién paga y quién recibe son inmutables** en las reglas de
+  Firestore: cambiar la dirección de un pago alteraría el saldo sin dejar
+  rastro. Reimputar a otra liquidación **sí** se permite, porque es una
+  corrección legítima que no altera monto ni dirección.
+- **Las partes se resuelven desde el tramo de porcentajes**, nunca del orden
+  del repositorio — se replica aquí la solución al defecto que ya apareció una
+  vez en el estado de cuenta, no el error.
+
+### Requiere acción
+
+**Publicar `firestore.rules`.** Sin las reglas de `payments`, la
+sincronización de pagos será rechazada.
+
 ## [0.4.0-alpha.24] — Documento bloqueado en iOS y fila ilegible en móvil
 
 ### Corregido

@@ -7,6 +7,9 @@ import {
   runMigrationV2,
   runMigrationV3,
   runMigrationV4,
+  runMigrationV5,
+  runMigrationV6,
+  runMigrationV7,
   STORE_NAMES,
   promisifyRequest,
   runInTransaction,
@@ -128,6 +131,56 @@ test('migrar de v4 a v5 (Build 1.5) preserva los gastos ya registrados y agrega 
   assert.equal(byExpense.length, 1);
 
   // 5. Ningún store previo desapareció en el camino.
+  for (const storeName of Object.values(STORE_NAMES)) {
+    assert.equal(db.objectStoreNames.contains(storeName), true, `Falta el store: ${storeName}`);
+  }
+});
+
+test('migrar de v7 a v8 (Build 1.8) preserva los datos y agrega el store de pagos', async () => {
+  const databaseName = `migration-v8-test-${Date.now()}`;
+
+  // Base ya instalada en el Build anterior, con un gasto real guardado.
+  await new Promise((resolve, reject) => {
+    const request = indexedDB.open(databaseName, 7);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      runMigrationV1(db);
+      runMigrationV2(db);
+      runMigrationV3(db);
+      runMigrationV4(db);
+      runMigrationV5(db);
+      runMigrationV6(db);
+      runMigrationV7(db);
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction([STORE_NAMES.EXPENSES], 'readwrite');
+      tx.objectStore(STORE_NAMES.EXPENSES).put({ id: 'gasto-previo', caseId: 'c1', amount: 5000 });
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+
+  const db = await openDatabase(databaseName);
+
+  const preserved = await runInTransaction(db, [STORE_NAMES.EXPENSES], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.EXPENSES).get('gasto-previo')),
+  );
+  assert.ok(preserved, 'el gasto anterior no puede perderse al migrar');
+  assert.equal(preserved.amount, 5000);
+
+  assert.equal(db.objectStoreNames.contains(STORE_NAMES.PAYMENTS), true);
+  await runInTransaction(db, [STORE_NAMES.PAYMENTS], 'readwrite', async (tx) => {
+    const store = tx.objectStore(STORE_NAMES.PAYMENTS);
+    assert.equal(store.indexNames.contains('caseId'), true);
+    assert.equal(store.indexNames.contains('settlementId'), true);
+    await promisifyRequest(store.put({ id: 'pago-1', caseId: 'c1', settlementId: null }));
+  });
+
   for (const storeName of Object.values(STORE_NAMES)) {
     assert.equal(db.objectStoreNames.contains(storeName), true, `Falta el store: ${storeName}`);
   }
