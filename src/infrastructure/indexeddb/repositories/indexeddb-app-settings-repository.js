@@ -10,17 +10,22 @@ function toRecord(settings) {
     id: settings.id,
     activeCaseId: settings.activeCaseId ? settings.activeCaseId.toString() : null,
     onboardingCompleted: settings.onboardingCompleted,
+    initialUploadDoneForCaseId: settings.initialUploadDoneForCaseId ?? null,
     updatedAt: settings.updatedAt.toISOString(),
   };
 }
 
 /** @param {object} record */
 function fromRecord(record) {
-  return new AppSettings(
+  const restored = new AppSettings(
     record.activeCaseId ? Identifier.from(record.activeCaseId).getValue() : null,
     record.onboardingCompleted,
     new Date(record.updatedAt),
   );
+  // Marca de la subida inicial: no es parámetro del constructor porque es un
+  // detalle de sincronización, no del ajuste en sí. Ausente = no hecha.
+  restored.initialUploadDoneForCaseId = record.initialUploadDoneForCaseId ?? null;
+  return restored;
 }
 
 export class IndexedDbAppSettingsRepository extends AppSettingsRepository {

@@ -2,6 +2,73 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.19] — Subir a la nube lo que ya existía en el dispositivo
+
+### Corregido
+
+Los decoradores de sincronización encolan una subida cuando algo **se
+guarda**. Eso cubre lo que se cree o edite de ahora en adelante, pero **no lo
+que ya estaba**: los participantes de un caso creado antes de que existiera
+la sincronización nunca vuelven a guardarse, así que jamás se encolaban y se
+quedaban solo en ese dispositivo.
+
+Consecuencia práctica: aunque el build anterior agregó `sync:participant` y
+`sync:beneficiary`, un caso ya existente seguía llegando vacío al segundo
+dispositivo, y la pantalla de "terminando de preparar el caso" se quedaba ahí
+indefinidamente — no había nada que descargar.
+
+- **`InitialUploadService`**: al abrir el caso, encola una vez la subida de
+  los participantes y beneficiarios que ya estaban en el dispositivo. Deja
+  constancia en la configuración local para no repetirlo en cada arranque.
+- **Si falla, no se marca como hecha**, de modo que se reintenta en el
+  siguiente arranque en vez de quedar a medias en silencio.
+- **5 pruebas** del servicio, incluida la que verifica que un fallo no impide
+  usar la aplicación.
+
+Total: **499** pruebas.
+
+### Requiere acción, en este orden
+
+1. **Publicar `firestore.rules`.** Sin las reglas de `participants` y
+   `beneficiaries` (agregadas en alpha.18), Firestore rechaza la escritura y
+   nada de esto funciona.
+2. Abrir la aplicación **en el dispositivo que tiene los datos**, para que la
+   subida inicial se ejecute.
+3. Recién entonces, el segundo dispositivo.
+
+## [0.4.0-alpha.19] — Subida inicial de lo que ya existía
+
+### Corregido
+
+El build anterior agregó la sincronización de participantes y beneficiarios,
+pero **solo se activa cuando algo se guarda**. Un caso creado antes de que
+existiera la sincronización nunca vuelve a guardarse, así que sus
+participantes se quedaban en el dispositivo original para siempre:
+verificado en Firestore que las colecciones `participants` y `beneficiaries`
+seguían sin aparecer.
+
+El otro dispositivo se quedaba indefinidamente en "Terminando de preparar el
+caso", esperando algo que nunca iba a llegar.
+
+- **`InitialUploadService`**: al abrir el caso, encola la subida de los
+  participantes y beneficiarios que ya estaban en el dispositivo. Idempotente
+  y con constancia en la configuración local para no repetirlo en cada
+  arranque. Si falla, **no** se marca como hecho, de modo que se reintenta.
+- `AppSettings` guarda esa marca (`initialUploadDoneForCaseId`).
+
+### Agregado
+
+- **5 pruebas**, incluida la que verifica que un fallo no marca la subida como
+  completada y por tanto se reintenta.
+
+Total: **499** pruebas.
+
+### Nota sobre el patrón
+
+Es el mismo error de fondo que el arranque en frío: construir el mecanismo
+para lo que ocurre _a partir de ahora_ y olvidar lo que _ya estaba_. Conviene
+tenerlo presente al agregar sincronización de cualquier entidad nueva.
+
 ## [0.4.0-alpha.18] — Participantes y beneficiarios nunca se sincronizaban
 
 ### Causa raíz encontrada

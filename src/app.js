@@ -50,6 +50,7 @@ import { ExpenseService } from './application/services/expense-service.js';
 import { ReimbursementService } from './application/services/reimbursement-service.js';
 import { AccountStatementService } from './application/services/account-statement-service.js';
 import { DeviceBootstrapService } from './application/services/device-bootstrap-service.js';
+import { InitialUploadService } from './application/services/initial-upload-service.js';
 import { AuthService } from './application/services/auth-service.js';
 import { MembershipService } from './application/services/membership-service.js';
 import { Clock } from './shared/clock.js';
@@ -331,6 +332,17 @@ async function main() {
   });
 
   markBootStep('Preparando el inicio de sesión…');
+  // Sube lo que ya existía antes de que hubiera sincronización: sin esto,
+  // los participantes de un caso antiguo nunca llegan a la nube y otro
+  // dispositivo no puede usar el caso.
+  const initialUploadService = new InitialUploadService({
+    participantRepo: rawParticipantRepo,
+    beneficiaryRepo: rawBeneficiaryRepo,
+    syncEngine,
+    appSettingsRepo,
+    clock,
+  });
+
   const authProvider = await withBootTimeout(
     createFirebaseAuthProvider(firebaseConfig),
     20000,
@@ -586,6 +598,7 @@ async function main() {
         );
         // Aquí arranca la sincronización real: envía lo pendiente y queda
         // escuchando los cambios del otro dispositivo.
+        await initialUploadService.uploadExistingCaseMembers(summary.caseEntity.id);
         await syncCoordinator.start(summary.caseEntity.id);
       }
       await navigate('home');
