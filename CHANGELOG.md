@@ -2,6 +2,40 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.20] — La aplicación en la pantalla de inicio de iOS
+
+En iOS, una aplicación añadida a la pantalla de inicio corre en un contenedor
+con almacenamiento **completamente separado** del de Safari: no comparte base
+de datos ni sesión. Arranca como un dispositivo nuevo, y ahí quedaron
+expuestos dos defectos.
+
+### Corregido
+
+- **El botón "Reintentar" de la pantalla de caso incompleto no descargaba
+  nada.** Llamaba a la sincronización, que solo SUBE lo pendiente y nunca
+  vuelve a pedir los participantes. Reintentar no servía de nada y la
+  pantalla se quedaba ahí indefinidamente. Ahora ejecuta la descarga real.
+- **`downloadCaseMembers()`** pasa a ser un método público e independiente
+  del arranque, precisamente para que se pueda reintentar.
+- **Persistencia de sesión explícita en Firebase Auth**
+  (`indexedDBLocalPersistence`, con `browserLocalPersistence` de alternativa).
+  `getAuth()` elige por su cuenta, y en el contenedor aislado de iOS esa
+  elección puede fallar: sin sesión, las reglas de Firestore rechazan todo y
+  el caso no se puede recuperar aunque los datos estén en la nube.
+
+### Agregado
+
+- **2 pruebas**: que la descarga funciona llamada por separado —el camino del
+  botón Reintentar— y que un fallo de red informa cero en vez de lanzar.
+
+Total: **501** pruebas.
+
+### Nota sobre iOS
+
+Al añadir la aplicación a la pantalla de inicio hay que **iniciar sesión de
+nuevo**: es un contenedor distinto, no un acceso directo a Safari. Los datos
+se descargan solos desde la nube tras ese primer inicio de sesión.
+
 ## [0.4.0-alpha.19] — Subir a la nube lo que ya existía en el dispositivo
 
 ### Corregido

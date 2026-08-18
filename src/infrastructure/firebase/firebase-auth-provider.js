@@ -37,9 +37,30 @@ export async function createFirebaseAuthProvider(config) {
     updateProfile,
     reauthenticateWithCredential,
     EmailAuthProvider,
+    initializeAuth,
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
   } = await import(FIREBASE_AUTH_URL);
 
-  const auth = getAuth(app);
+  // Persistencia explícita, con alternativas en orden.
+  //
+  // `getAuth()` elige por su cuenta, y en el contenedor aislado de una
+  // aplicación añadida a la pantalla de inicio en iOS esa elección puede
+  // fallar: la sesión no se conserva y, sin autenticación, las reglas de
+  // Firestore rechazan todo — el caso no se puede recuperar y la aplicación
+  // queda inservible aunque los datos estén en la nube.
+  //
+  // Declararlo evita depender de esa heurística. Si `initializeAuth` falla
+  // (por ejemplo, porque ya se inicializó antes), se cae a `getAuth()`, que
+  // devuelve la instancia existente.
+  let auth;
+  try {
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    });
+  } catch {
+    auth = getAuth(app);
+  }
 
   if (config.useEmulator) {
     connectAuthEmulator(auth, config.emulatorUrl, { disableWarnings: true });

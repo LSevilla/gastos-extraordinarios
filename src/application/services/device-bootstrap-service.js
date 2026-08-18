@@ -147,9 +147,36 @@ export class DeviceBootstrapService {
       );
     }
 
-    // Participantes y beneficiarios: sin ellos el caso es inservible y la
-    // aplicación no puede ni pintar la pantalla principal, porque el reparto
-    // de gastos necesita saber quiénes son las dos partes.
+    await this.downloadCaseMembers(caseId);
+
+    // Marcar la incorporación como completada es lo que impide que la
+    // aplicación vuelva a ofrecer "crear un caso" en el próximo arranque.
+    const settings =
+      (await this.deps.appSettingsRepo.get()) ??
+      new AppSettings(null, false, this.deps.clock.utcNow());
+    settings.activeCaseId = caseId;
+    settings.onboardingCompleted = true;
+    settings.updatedAt = this.deps.clock.utcNow();
+    await this.deps.appSettingsRepo.save(settings);
+
+    return Result.ok({ recovered: true, caseId, reason: 'recovered-from-cloud' });
+  }
+
+  /**
+   * Descarga participantes y beneficiarios de un caso desde la nube.
+   *
+   * Es público y separado del arranque a propósito: la pantalla de "caso
+   * incompleto" necesita PODER REINTENTAR esta descarga. Antes su botón
+   * llamaba a la sincronización, que solo SUBE lo pendiente y nunca vuelve a
+   * pedir los participantes — así que reintentar no servía de nada y la
+   * pantalla se quedaba ahí para siempre.
+   *
+   * @param {string} caseId
+   * @returns {Promise<{participants: number, beneficiaries: number}>}
+   */
+  async downloadCaseMembers(caseId) {
+    let participantCount = 0;
+    let beneficiaryCount = 0;
     if (this.deps.caseMembersLoader) {
       try {
         const members = await withTimeout(
@@ -174,6 +201,7 @@ export class DeviceBootstrapService {
               raw.updatedAt ? new Date(raw.updatedAt) : this.deps.clock.utcNow(),
             ),
           );
+          participantCount += 1;
         }
         for (const raw of members.beneficiaries ?? []) {
           await this.deps.beneficiaryRepo.save(
@@ -189,6 +217,7 @@ export class DeviceBootstrapService {
               raw.updatedAt ? new Date(raw.updatedAt) : this.deps.clock.utcNow(),
             ),
           );
+          beneficiaryCount += 1;
         }
       } catch (error) {
         // Se continúa igualmente: el caso ya está recuperado y la pantalla
@@ -197,17 +226,6 @@ export class DeviceBootstrapService {
         console.warn('[arranque] No se pudieron descargar participantes:', error);
       }
     }
-
-    // Marcar la incorporación como completada es lo que impide que la
-    // aplicación vuelva a ofrecer "crear un caso" en el próximo arranque.
-    const settings =
-      (await this.deps.appSettingsRepo.get()) ??
-      new AppSettings(null, false, this.deps.clock.utcNow());
-    settings.activeCaseId = caseId;
-    settings.onboardingCompleted = true;
-    settings.updatedAt = this.deps.clock.utcNow();
-    await this.deps.appSettingsRepo.save(settings);
-
-    return Result.ok({ recovered: true, caseId, reason: 'recovered-from-cloud' });
+    return { participants: participantCount, beneficiaries: beneficiaryCount };
   }
 }

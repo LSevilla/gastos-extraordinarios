@@ -375,6 +375,10 @@ async function main() {
       renderIncompleteCase(root, {
         caseName: summary.caseEntity.name,
         onRetry: async () => {
+          // Descarga REAL de participantes. Antes esto llamaba a la
+          // sincronización, que solo sube lo pendiente: reintentar no
+          // volvía a pedir nada y la pantalla se quedaba ahí para siempre.
+          await deviceBootstrapService.downloadCaseMembers(summary.caseEntity.id.toString());
           await syncCoordinator.syncNow('manual');
           await navigate('home');
         },

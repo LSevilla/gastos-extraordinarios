@@ -258,3 +258,53 @@ test('si la descarga de participantes falla, el caso se recupera igual y no se p
     'el caso se recupera; la pantalla de caso incompleto permite reintentar',
   );
 });
+
+test('downloadCaseMembers() se puede llamar por separado: es lo que usa el botón Reintentar', async () => {
+  const savedParticipants = [];
+  const { service } = buildContext({
+    caseMembersLoader: {
+      async fetchCaseMembersFromRemote() {
+        return {
+          participants: [
+            {
+              id: '66666666-6666-4666-8666-666666666666',
+              caseId: CASE_ID,
+              firstName: 'Ana',
+              lastName: 'Rojas',
+            },
+          ],
+          beneficiaries: [],
+        };
+      },
+    },
+    participantRepo: {
+      async save(p) {
+        savedParticipants.push(p);
+      },
+    },
+  });
+
+  // Se llama directamente, sin pasar por recoverCasesForUser: así lo hace la
+  // pantalla de caso incompleto. Antes su botón llamaba a la sincronización,
+  // que solo sube, y por eso reintentar no servía de nada.
+  const result = await service.downloadCaseMembers(CASE_ID);
+
+  assert.equal(result.participants, 1);
+  assert.equal(savedParticipants.length, 1);
+  assert.equal(savedParticipants[0].getFullName(), 'Ana Rojas');
+});
+
+test('reintentar la descarga cuando no hay red no lanza: informa cero y permite volver a intentar', async () => {
+  const { service } = buildContext({
+    caseMembersLoader: {
+      async fetchCaseMembersFromRemote() {
+        throw new Error('sin red');
+      },
+    },
+  });
+
+  const result = await service.downloadCaseMembers(CASE_ID);
+
+  assert.equal(result.participants, 0);
+  assert.equal(result.beneficiaries, 0);
+});
