@@ -165,6 +165,16 @@ export function openDatabase(databaseName = DATABASE_NAME) {
 
     request.onupgradeneeded = (event) => {
       const db = request.result;
+      // Si una migración lanza, la transacción de actualización aborta y el
+      // request queda sin resolver. Se captura para convertirlo en un
+      // rechazo explícito con la versión que falló, en vez de un cuelgue.
+      request.transaction.onabort = () => {
+        reject(
+          new Error(
+            `DB_MIGRATION_ABORTED: falló la actualización de la base de datos desde la versión ${event.oldVersion}.`,
+          ),
+        );
+      };
       if (event.oldVersion < 1) {
         runMigrationV1(db);
       }
@@ -186,6 +196,21 @@ export function openDatabase(databaseName = DATABASE_NAME) {
       if (event.oldVersion < 7) {
         runMigrationV7(db);
       }
+    };
+
+    // `blocked` se dispara cuando otra pestaña tiene abierta una versión
+    // anterior de la base. Sin este manejador la promesa NO resuelve ni
+    // rechaza: se queda colgada para siempre y la aplicación no llega a
+    // pintar nada — pantalla en blanco sin ningún error. Es un caso real,
+    // no teórico: ocurre al actualizar con la aplicación abierta en otra
+    // pestaña, y en Safari también con una instancia añadida a la pantalla
+    // de inicio corriendo en segundo plano.
+    request.onblocked = () => {
+      reject(
+        new Error(
+          'DB_BLOCKED: la base de datos está abierta en otra pestaña con una versión anterior. Cierra las demás pestañas de la aplicación y vuelve a intentarlo.',
+        ),
+      );
     };
 
     request.onsuccess = () => resolve(request.result);

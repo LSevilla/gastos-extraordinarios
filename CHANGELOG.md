@@ -2,6 +2,49 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.17] — La pantalla en blanco era un cuelgue, no un error
+
+### Diagnóstico corregido
+
+`reset.html` reportó **0 Service Workers y 0 cachés** en el dispositivo
+afectado. El Service Worker nunca fue la causa: los dos builds anteriores
+persiguieron una hipótesis equivocada. (La lista de precaché sí estaba
+incompleta y valía la pena arreglarla, pero no era esto.)
+
+El dato decisivo fue que la pantalla en blanco **no mostraba el mensaje de
+error** añadido en el build anterior. Ese manejador captura errores, pero una
+promesa que nunca resuelve ni rechaza no dispara ningún evento. No era un
+fallo: era un **cuelgue**.
+
+### Corregido
+
+- **`openDatabase()` no manejaba el evento `blocked`.** Ese evento se dispara
+  cuando otra pestaña tiene abierta una versión anterior de la base — al
+  actualizar con la aplicación abierta en otro sitio, o en Safari con una
+  instancia en la pantalla de inicio corriendo en segundo plano. Sin
+  manejarlo, la promesa quedaba pendiente para siempre y la aplicación no
+  llegaba a pintar nada. Ahora rechaza con un motivo identificable.
+- **Una migración que aborte tampoco cuelga**: se captura `onabort` de la
+  transacción de actualización y se informa desde qué versión falló.
+
+### Agregado
+
+- **Pantalla de arranque visible desde el primer instante**, que indica en qué
+  paso está: abriendo la base, conectando con el servidor, preparando el
+  inicio de sesión. Si algo se detiene, se ve dónde en vez de una pantalla
+  vacía.
+- **Tiempo límite en cada paso del arranque** (15 s la base de datos, 20 s las
+  conexiones), para que ningún cuelgue sea indefinido.
+- **Aviso a los 12 segundos** con acceso a la reparación, para el caso de que
+  algo quede pendiente sin disparar ningún evento.
+- **Captura de promesas rechazadas** (`unhandledrejection`). El evento `error`
+  no las cubre: un fallo dentro de una función async pasaba completamente
+  inadvertido.
+- **2 pruebas** que verifican que `openDatabase` maneja `blocked` y `abort`, y
+  que el arranque tiene pantalla visible y captura de promesas.
+
+Total: **492** pruebas.
+
 ## [0.4.0-alpha.16] — Herramientas para diagnosticar la pantalla en blanco
 
 La corrección anterior arregló una causa real (la lista del Service Worker

@@ -14,7 +14,30 @@
     <link rel="stylesheet" href="./css/components.css" />
   </head>
   <body>
-    <div id="app" role="main" aria-live="polite"></div>
+    <div id="app" role="main" aria-live="polite">
+      <!-- Contenido inicial: se ve MIENTRAS arranca la aplicación y la
+           reemplaza el primer render. Si el arranque se cuelga, esto es lo
+           que queda en pantalla — en vez de blanco — indicando en qué paso
+           se detuvo. -->
+      <div
+        id="boot-screen"
+        style="
+          font-family: system-ui, sans-serif;
+          max-width: 620px;
+          margin: 0 auto;
+          padding: 48px 20px;
+          text-align: center;
+          color: #475467;
+        "
+      >
+        <p style="font-weight: 600; color: #1a1f2e">Aporte Compartido</p>
+        <p id="boot-step" style="font-size: 0.9rem">Iniciando…</p>
+        <p id="boot-slow" style="display: none; font-size: 0.85rem; color: #92400e">
+          Está tardando más de lo normal.
+          <a href="./reset.html" style="color: #1e5aa8">Reparar la aplicación</a>
+        </p>
+      </div>
+    </div>
 
     <!-- Módulos ES nativos, sin build step (ADR-002). El navegador ejecuta
          exactamente este archivo, sin transformación previa. -->
@@ -23,12 +46,20 @@
       // blanco sin decir nada — el manejador de errores de app.js ni siquiera
       // llega a existir. Esto lo captura ANTES y muestra la causa, en vez de
       // dejar a la persona mirando una pantalla vacía.
-      window.addEventListener('error', (event) => {
+      // Aviso si el arranque tarda demasiado. Cubre el caso en que una
+      // promesa nunca resuelve NI rechaza: ahí no se dispara ningún evento
+      // de error, así que sin esto la persona no recibe ninguna señal.
+      setTimeout(() => {
+        const slow = document.getElementById('boot-slow');
+        const app = document.getElementById('app');
+        if (slow && app && app.querySelector('#boot-screen')) slow.style.display = 'block';
+      }, 12000);
+
+      const showFatal = (detail, source) => {
         const root = document.getElementById('app');
         if (!root || root.dataset.errorShown === 'true') return;
         root.dataset.errorShown = 'true';
-        const detail = event.message || String(event.error || 'error desconocido');
-        const source = event.filename ? `\n\nArchivo: ${event.filename}:${event.lineno}` : '';
+        const step = window.__bootStep ? `\n\nPaso del arranque: ${window.__bootStep}` : '';
         root.innerHTML =
           '<div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;padding:28px 20px;line-height:1.55">' +
           '<h1 style="font-size:1.25rem">La aplicación no pudo cargar</h1>' +
@@ -36,8 +67,22 @@
           '<p><a href="./reset.html" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#1e5aa8;color:#fff;text-decoration:none;font-weight:600">Reparar la aplicación</a></p>' +
           '<p style="color:#667085;font-size:.85rem;margin-top:24px">Detalle técnico:</p>' +
           '<pre style="background:#f1f3f7;padding:12px;border-radius:8px;font-size:.75rem;white-space:pre-wrap">' +
-          String(detail + source).replace(/</g, '&lt;') +
+          String(detail + (source || '') + step).replace(/</g, '&lt;') +
           '</pre></div>';
+      };
+
+      // Las promesas rechazadas NO disparan el evento 'error'. Sin esto, un
+      // fallo dentro de una función async pasa completamente inadvertido.
+      window.addEventListener('unhandledrejection', (event) => {
+        showFatal(
+          String(event.reason && event.reason.message ? event.reason.message : event.reason),
+        );
+      });
+
+      window.addEventListener('error', (event) => {
+        const detail = event.message || String(event.error || 'error desconocido');
+        const source = event.filename ? `\n\nArchivo: ${event.filename}:${event.lineno}` : '';
+        showFatal(detail, source);
       });
     </script>
     <script type="module" src="./src/app.js"></script>

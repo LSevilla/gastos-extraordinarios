@@ -70,9 +70,59 @@ import { renderAcceptInvitation } from './presentation/views/accept-invitation-v
 import { SessionGate } from './presentation/session-gate.js';
 import { showToast } from './presentation/components/toast.js';
 
+/**
+ * Marca en qué paso del arranque estamos.
+ *
+ * La aplicación no pinta nada hasta terminar de construir sus dependencias.
+ * Si un paso se cuelga —una base bloqueada, una descarga que no responde—,
+ * la persona ve una pantalla en blanco sin ninguna pista, y desde fuera es
+ * imposible saber dónde se detuvo. Esto lo hace visible.
+ *
+ * @param {string} step
+ */
+function markBootStep(step) {
+  window.__bootStep = step;
+  const indicator = document.getElementById('boot-step');
+  if (indicator) indicator.textContent = step;
+}
+
+/**
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} timeoutMs
+ * @param {string} label
+ * @returns {Promise<T>}
+ */
+function withBootTimeout(promise, timeoutMs, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `TIMEOUT en "${label}" tras ${timeoutMs / 1000}s. La aplicación no pudo completar este paso del arranque.`,
+          ),
+        ),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function main() {
   const root = document.getElementById('app');
-  const db = await openDatabase();
+
+  markBootStep('Abriendo la base de datos local…');
+  const db = await withBootTimeout(openDatabase(), 15000, 'abrir la base de datos local');
+
   const clock = Clock.system();
 
   const rawCaseRepo = new IndexedDbCaseRepository(db);
@@ -92,7 +142,12 @@ async function main() {
 
   // ADR-017: Firestore se inicializa una sola vez (firebase-app.js) y se
   // comparte entre AuthProvider y el motor de sincronización.
-  const { firestore, firestoreModule } = await getFirestoreClient(firebaseConfig);
+  markBootStep('Conectando con el servidor…');
+  const { firestore, firestoreModule } = await withBootTimeout(
+    getFirestoreClient(firebaseConfig),
+    20000,
+    'conectar con Firestore',
+  );
 
   const syncEngine = new SyncEngine({
     operationQueueRepo,
@@ -255,7 +310,12 @@ async function main() {
     clock,
   });
 
-  const authProvider = await createFirebaseAuthProvider(firebaseConfig);
+  markBootStep('Preparando el inicio de sesión…');
+  const authProvider = await withBootTimeout(
+    createFirebaseAuthProvider(firebaseConfig),
+    20000,
+    'preparar la autenticación',
+  );
   const authService = new AuthService({ authProvider, userProfileRepo, clock });
   let currentUserProfile = null;
 
