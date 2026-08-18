@@ -2,6 +2,39 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.4.0-alpha.14] — El arranque se quedaba colgado en "Ingresando…"
+
+### Corregido
+
+La consulta a la nube que recupera los casos quedó en el **camino crítico del
+arranque, sin límite de tiempo**. Firestore puede tardar indefinidamente
+cuando la conexión es mala o inestable —habitual en un teléfono con datos
+móviles— y mientras tanto la aplicación no terminaba de arrancar: la persona
+se quedaba mirando "Ingresando…" sin poder hacer nada.
+
+Es un defecto introducido por la corrección anterior. Al mover la consulta a
+Firestore resolví que buscara en el lugar correcto, pero convertí una
+operación de red en un requisito para poder usar la aplicación.
+
+Dos protecciones, deliberadamente redundantes porque el costo de fallar aquí
+es que nadie pueda entrar:
+
+- **Tiempo límite de 8 segundos** en la consulta de membresías y en la carga
+  del caso. Si la nube no responde, se sigue con el flujo normal.
+- **`try/catch` alrededor de todo el arranque en frío** en `app.js`: ante
+  cualquier fallo inesperado se continúa igualmente. Como mucho la aplicación
+  ofrecerá crear un caso —molesto, pero recuperable— en vez de no arrancar.
+
+Nueva prueba: simula una red que **nunca** responde y verifica que el arranque
+se rinde por tiempo límite en vez de esperar para siempre.
+
+Total: **487** pruebas.
+
+### Sigue pendiente
+
+- La pantalla para resolver conflictos.
+- Los archivos adjuntos no se sincronizan: solo viajan sus metadatos.
+
 ## [0.4.0-alpha.13] — El arranque en frío consultaba la base equivocada
 
 ### Corregido

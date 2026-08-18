@@ -19,6 +19,42 @@ import { AppSettings } from '../../domain/configuration/app-settings.js';
 import { Identifier } from '../../shared/identifier.js';
 import { Result } from '../../shared/result.js';
 
+/**
+ * Tiempo máximo de espera a la nube durante el arranque.
+ *
+ * Existe porque esta consulta está en el camino crítico: hasta que responde,
+ * la persona ve "Ingresando…" y no puede hacer nada. Firestore puede tardar
+ * indefinidamente cuando la conexión es mala o inestable —muy común en un
+ * teléfono con datos móviles— y sin un límite la aplicación simplemente
+ * nunca termina de arrancar.
+ *
+ * Ocho segundos es suficiente para una red lenta pero razonable, y breve
+ * como para que un fallo no se sienta como un cuelgue.
+ */
+const REMOTE_LOOKUP_TIMEOUT_MS = 8000;
+
+/**
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} timeoutMs
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export class DeviceBootstrapService {
   /**
    * @param {{
@@ -51,7 +87,10 @@ export class DeviceBootstrapService {
       // que en un dispositivo nuevo está vacía: preguntarle ahí siempre
       // devolvería "no tienes casos" y la aplicación ofrecería crear uno
       // desde cero teniendo los datos a salvo en Firestore.
-      memberships = await this.deps.membershipRepo.fetchByUserFromRemote(userId);
+      memberships = await withTimeout(
+        this.deps.membershipRepo.fetchByUserFromRemote(userId),
+        REMOTE_LOOKUP_TIMEOUT_MS,
+      );
     } catch (error) {
       // Sin conexión o sin permisos todavía: no es un error que deba
       // detener el arranque.
@@ -77,7 +116,10 @@ export class DeviceBootstrapService {
     if (!existingLocal) {
       let remoteCase;
       try {
-        remoteCase = await this.deps.remoteCaseLoader.loadCase(caseId);
+        remoteCase = await withTimeout(
+          this.deps.remoteCaseLoader.loadCase(caseId),
+          REMOTE_LOOKUP_TIMEOUT_MS,
+        );
       } catch (error) {
         return Result.ok({ recovered: false, caseId: null, reason: `case-fetch-failed: ${error}` });
       }

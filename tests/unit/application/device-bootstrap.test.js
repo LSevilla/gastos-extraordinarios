@@ -10,6 +10,7 @@ const CASE_ID = '11111111-1111-4111-8111-111111111111';
 function buildContext({
   memberships = [],
   membershipError = null,
+  membershipHangs = false,
   remoteCase = { name: 'Rojas / Sevilla', operationMode: 'individual' },
   localCase = null,
   settings = null,
@@ -21,6 +22,11 @@ function buildContext({
       // Debe consultar la NUBE, no la copia local: en un dispositivo nuevo
       // la copia local está vacía por definición.
       async fetchByUserFromRemote() {
+        if (membershipHangs) {
+          // Simula una red que nunca responde, que es lo que ocurre con
+          // datos móviles inestables.
+          return new Promise(() => {});
+        }
         if (membershipError) throw membershipError;
         return memberships;
       },
@@ -153,4 +159,21 @@ test('con varias membresías se recupera la primera, sin fallar por la ambigüed
 
   assert.equal(result.getValue().recovered, true);
   assert.equal(result.getValue().caseId, CASE_ID);
+});
+
+test('si la nube no responde nunca, el arranque no se queda colgado: corta y sigue', async () => {
+  const { service, saved } = buildContext({ membershipHangs: true });
+
+  const startedAt = Date.now();
+  const result = await service.recoverCasesForUser('uid-1');
+  const elapsed = Date.now() - startedAt;
+
+  assert.equal(result.isSuccess(), true);
+  assert.equal(result.getValue().recovered, false);
+  assert.match(result.getValue().reason, /unavailable/);
+  assert.ok(
+    elapsed < 12000,
+    `debe rendirse por tiempo límite y no esperar para siempre (tardó ${elapsed} ms)`,
+  );
+  assert.equal(saved.cases.length, 0);
 });

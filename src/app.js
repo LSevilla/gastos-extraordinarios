@@ -462,9 +462,18 @@ async function main() {
     // nueva o el mismo usuario en otro aparato. Antes de ofrecerle crear un
     // caso desde cero se comprueba en la nube: sus datos pueden estar ahí.
     if (!settings || !settings.onboardingCompleted) {
-      const recovery = await deviceBootstrapService.recoverCasesForUser(currentUserProfile.id);
-      if (recovery.isSuccess() && recovery.getValue().recovered) {
-        settings = await appSettingsRepo.get();
+      // Envuelto en try/catch además del tiempo límite interno: esta
+      // consulta está en el camino crítico del arranque, y un fallo
+      // inesperado aquí dejaría a la persona mirando "Ingresando…" para
+      // siempre. Ante cualquier problema se sigue con el flujo normal,
+      // que como mucho ofrece crear un caso — molesto, pero recuperable.
+      try {
+        const recovery = await deviceBootstrapService.recoverCasesForUser(currentUserProfile.id);
+        if (recovery.isSuccess() && recovery.getValue().recovered) {
+          settings = await appSettingsRepo.get();
+        }
+      } catch (error) {
+        console.warn('[arranque] No se pudieron recuperar los casos desde la nube:', error);
       }
     }
 
