@@ -2,6 +2,34 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.4] — "Administrar beneficiarios" fallaba al pulsarlo
+
+### Corregido
+
+`deps.onManageBeneficiaries is not a function`.
+
+Cuando Beneficiarios pasó a ser una pantalla propia, el callback que abre esa
+ruta se pasó **a la vista equivocada**: a la de miembros del caso, que no lo
+usa, en vez de a la de administrar el caso, que sí. El botón existía y
+fallaba al pulsarlo.
+
+Es la segunda vez que aparece un fallo de esta forma —algo que la vista espera
+y `app.js` no le da—, y solo se manifiesta al recorrer ese camino concreto,
+así que puede publicarse sin que nadie lo note.
+
+### Agregado
+
+- **2 pruebas** contra esta clase de error: recorren todas las vistas,
+  extraen los callbacks que cada una requiere y verifican que `app.js` los
+  proporcione. La segunda comprueba que ninguna vista quedó sin ruta que la
+  abra.
+
+  No verifican que el callback se pase a la ruta correcta —eso exigiría
+  ejecutar la aplicación—, pero atrapan el olvido completo, que es el fallo
+  que se ha producido dos veces.
+
+Total: **558** pruebas.
+
 ## [0.5.0-alpha.3] — Crear un caso nuevo fallaba
 
 ### Corregido

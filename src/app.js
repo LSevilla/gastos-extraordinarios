@@ -498,6 +498,10 @@ async function main() {
         caseEntity: summary.caseEntity,
         participants: summary.participants,
         percentagePeriod: summary.percentagePeriod,
+        // Lo usa el botón "Administrar beneficiarios" de esa pantalla. Se
+        // había pasado por error a la ruta de miembros del caso, que no lo
+        // usa, y el botón fallaba al pulsarlo.
+        onManageBeneficiaries: () => navigate('beneficiaries'),
         onBack: () => navigate('home'),
       });
     } else if (view === 'caseMembers') {
@@ -506,7 +510,6 @@ async function main() {
         caseId: summary.caseEntity.id.toString(),
         currentUserId: currentUserProfile.id,
         onBack: () => navigate('home'),
-        onManageBeneficiaries: () => navigate('beneficiaries'),
       });
     } else if (view === 'beneficiaries') {
       await renderBeneficiaries(root, {
