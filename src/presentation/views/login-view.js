@@ -1,5 +1,6 @@
 // src/presentation/views/login-view.js
 import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js';
+import { enhanceAllPasswordFields } from '../components/password-field.js';
 
 /**
  * @param {HTMLElement} root
@@ -7,6 +8,7 @@ import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js
  *   authService: import('../../application/services/auth-service.js').AuthService,
  *   onSignedIn: () => void,
  *   onForgotPassword: () => void,
+ *   onSignUp?: () => void,
  * }} deps
  */
 export function renderLogin(root, deps) {
@@ -31,10 +33,21 @@ export function renderLogin(root, deps) {
       <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
       <button type="button" class="btn btn-secondary btn-block" id="forgot-password-btn">Olvidé mi contraseña</button>
     </form>
+    <p class="muted-text">¿Todavía no tienes cuenta?</p>
+    <button type="button" class="btn btn-secondary btn-block" id="sign-up-btn">Crear una cuenta</button>
   `;
 
   const form = card.querySelector('form');
+  enhanceAllPasswordFields(form);
   form.querySelector('#forgot-password-btn').addEventListener('click', deps.onForgotPassword);
+  const signUpButton = card.querySelector('#sign-up-btn');
+  if (deps.onSignUp) {
+    signUpButton.addEventListener('click', deps.onSignUp);
+  } else {
+    // Sin destino al que ir, el botón sobra: mostrarlo desactivado sería
+    // ofrecer algo que no existe.
+    signUpButton.remove();
+  }
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

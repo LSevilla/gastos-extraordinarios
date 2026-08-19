@@ -19,6 +19,28 @@ export class AuthProvider {
   }
 
   /** @returns {Promise<void>} */
+  /**
+   * Crea una cuenta nueva y deja la sesión iniciada.
+   *
+   * @param {string} _email
+   * @param {string} _password
+   * @param {string} _displayName
+   * @returns {Promise<{uid: string, email: string, displayName: string}>}
+   */
+  async signUp(_email, _password, _displayName) {
+    throw new Error('AuthProvider.signUp no implementado.');
+  }
+
+  /**
+   * Envía el correo de verificación a la sesión actual. Se ofrece aparte del
+   * registro a propósito: si el envío falla —cuota, red—, la cuenta ya
+   * quedó creada y la persona puede entrar igual.
+   * @returns {Promise<void>}
+   */
+  async sendEmailVerification() {
+    throw new Error('AuthProvider.sendEmailVerification no implementado.');
+  }
+
   async signOut() {
     throw new Error('AuthProvider.signOut no implementado.');
   }

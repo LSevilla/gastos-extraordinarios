@@ -161,6 +161,94 @@ export class AuthService {
   }
 
   /**
+   * Crea una cuenta nueva y deja la sesión iniciada.
+   *
+   * El registro es ABIERTO: cualquiera con el enlace puede crear su cuenta.
+   * Es lo que hace falta para probar con otras personas sin depender de que
+   * alguien las cree a mano en la consola de Firebase. No abre una brecha
+   * sobre los datos existentes: las reglas de Firestore solo dan acceso a un
+   * caso a quien tiene una membresía activa en él, así que una cuenta nueva
+   * empieza vacía y solo ve lo suyo.
+   *
+   * @param {{email: string, password: string, confirmPassword: string, displayName: string}} input
+   * @returns {Promise<Result<import('../../domain/auth/user-profile.js').UserProfile>>}
+   */
+  async signUp({ email, password, confirmPassword, displayName }) {
+    const trimmedEmail = (email ?? '').trim();
+    const trimmedName = (displayName ?? '').trim();
+
+    let validation = ValidationResult.valid();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      validation = validation.withError(
+        'email',
+        'AUTH_EMAIL_INVALID',
+        'Ingresa un correo electrónico válido.',
+      );
+    }
+    if (trimmedName.length < 2) {
+      validation = validation.withError(
+        'displayName',
+        'AUTH_DISPLAY_NAME_REQUIRED',
+        'Ingresa tu nombre (al menos 2 caracteres).',
+      );
+    }
+    if (!validation.isValid()) return Result.fail(validation);
+
+    const policy = validatePasswordPolicy(password);
+    if (!policy.isValid()) return Result.fail(policy);
+
+    if (password !== confirmPassword) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'confirmPassword',
+            code: 'AUTH_PASSWORD_MISMATCH',
+            message: 'Las dos contraseñas no coinciden.',
+          },
+        ]),
+      );
+    }
+
+    let account;
+    try {
+      account = await this.deps.authProvider.signUp(trimmedEmail, password, trimmedName);
+    } catch (error) {
+      logAuthErrorForDevelopers(error, 'signUp');
+      // El correo ya en uso es, con diferencia, el caso más frecuente, y el
+      // mensaje debe aparecer junto a ese campo para que se pueda corregir.
+      const field = String(error?.code ?? '').includes('email') ? 'email' : 'password';
+      return Result.fail(
+        ValidationResult.invalid([
+          { field, code: 'AUTH_SIGNUP_FAILED', message: translateAuthError(error) },
+        ]),
+      );
+    }
+
+    // El correo de verificación se envía SIN esperar y sin propagar el
+    // fallo: la cuenta ya está creada y utilizable, y quedarse sin poder
+    // entrar porque falló un envío sería absurdo.
+    if (typeof this.deps.authProvider.sendEmailVerification === 'function') {
+      Promise.resolve(this.deps.authProvider.sendEmailVerification()).catch((error) =>
+        logAuthErrorForDevelopers(error, 'sendEmailVerification'),
+      );
+    }
+
+    const now = this.deps.clock.utcNow();
+    const profile = new UserProfile(
+      account.uid,
+      account.displayName || trimmedName,
+      account.email ?? trimmedEmail,
+      'active',
+      now,
+      now,
+      now,
+      null,
+    );
+    await this.deps.userProfileRepo.save(profile);
+    return Result.ok(profile);
+  }
+
+  /**
    * Cambia la contraseña de la cuenta. Exige la actual — ver la nota en
    * AuthProvider.changePassword sobre por qué no es un trámite.
    *

@@ -13,6 +13,7 @@
 // vínculo con el participante, con un acceso para editar aquel donde
 // corresponde.
 import { showToast } from '../components/toast.js';
+import { enhanceAllPasswordFields } from '../components/password-field.js';
 import { createBreadcrumb } from '../components/breadcrumb.js';
 import { openModal } from '../components/modal.js';
 import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js';
@@ -154,6 +155,7 @@ export async function renderProfile(root, deps) {
           deps.onProfileUpdated();
           render();
         });
+        enhanceAllPasswordFields(form);
         body.appendChild(form);
       },
     });
@@ -206,6 +208,7 @@ export async function renderProfile(root, deps) {
           handle.close();
           showToast('Contraseña actualizada. Úsala la próxima vez que inicies sesión.');
         });
+        enhanceAllPasswordFields(form);
         body.appendChild(form);
       },
     });

@@ -71,6 +71,7 @@ import { renderRegisterExpense } from './presentation/views/register-expense-vie
 import { renderExpensesList } from './presentation/views/expenses-list-view.js';
 import { renderExpenseDetail } from './presentation/views/expense-detail-view.js';
 import { renderLogin } from './presentation/views/login-view.js';
+import { renderSignUp } from './presentation/views/sign-up-view.js';
 import { renderForgotPassword } from './presentation/views/forgot-password-view.js';
 import { renderResetPassword } from './presentation/views/reset-password-view.js';
 import { renderCaseMembers } from './presentation/views/case-members-view.js';
@@ -729,6 +730,17 @@ async function main() {
         /* el observador de sesión dispara enterAuthenticatedApp() */
       },
       onForgotPassword: showForgotPassword,
+      onSignUp: showSignUp,
+    });
+  }
+
+  function showSignUp() {
+    renderSignUp(root, {
+      authService,
+      onSignedUp: () => {
+        /* el observador de sesión dispara enterAuthenticatedApp() */
+      },
+      onBackToLogin: showLogin,
     });
   }
 

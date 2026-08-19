@@ -5,6 +5,7 @@
 // es válido se muestra el formulario de nueva contraseña. No basta con leer
 // oobCode de la URL y asumir que sirve.
 import { validatePasswordPolicy, MIN_PASSWORD_LENGTH } from '../../domain/auth/password-policy.js';
+import { enhanceAllPasswordFields } from '../components/password-field.js';
 import { applyFieldErrors, clearFieldErrors } from '../components/form-errors.js';
 import { showToast } from '../components/toast.js';
 
@@ -55,6 +56,7 @@ export async function renderResetPassword(root, deps) {
     `;
 
     const form = cardEl.querySelector('form');
+    enhanceAllPasswordFields(form);
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       clearFieldErrors(form);

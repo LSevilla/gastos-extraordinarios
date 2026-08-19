@@ -711,3 +711,32 @@ body.has-modal-open {
     flex: 0 0 auto;
   }
 }
+
+/* ---- Campo de contraseña con mostrar/ocultar ---- */
+.password-field {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.password-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.password-field__toggle {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-primario);
+  background: none;
+  border: var(--border-width) solid var(--color-borde);
+  border-radius: var(--radius-button);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+  /* 44px de alto mínimo: objetivo táctil, no se reduce con el texto. */
+  min-height: 44px;
+  white-space: nowrap;
+}
+.password-field__toggle:hover {
+  background: var(--color-fondo);
+}

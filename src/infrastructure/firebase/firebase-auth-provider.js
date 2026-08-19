@@ -37,6 +37,8 @@ export async function createFirebaseAuthProvider(config) {
     updateProfile,
     reauthenticateWithCredential,
     EmailAuthProvider,
+    createUserWithEmailAndPassword,
+    sendEmailVerification,
     setPersistence,
     indexedDBLocalPersistence,
     browserLocalPersistence,
@@ -77,6 +79,30 @@ export async function createFirebaseAuthProvider(config) {
     async signIn(email, password) {
       const credential = await signInWithEmailAndPassword(auth, email, password);
       return toAuthUser(credential.user);
+    }
+
+    async signUp(email, password, displayName) {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      if (displayName) {
+        // El nombre se establece aparte porque `createUser` no lo acepta. Si
+        // falla, la cuenta ya existe y es utilizable: no se propaga el error.
+        try {
+          await updateProfile(credential.user, { displayName });
+        } catch {
+          /* el nombre se puede corregir después desde Mi perfil */
+        }
+      }
+      return {
+        uid: credential.user.uid,
+        email: credential.user.email,
+        displayName: credential.user.displayName ?? displayName ?? '',
+      };
+    }
+
+    async sendEmailVerification() {
+      const user = auth.currentUser;
+      if (!user) throw new Error('auth/no-current-user');
+      await sendEmailVerification(user);
     }
 
     async signOut() {

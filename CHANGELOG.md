@@ -2,6 +2,45 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.2] — Registro de cuentas y ver la contraseña
+
+### Agregado
+
+- **Registro de cuentas nuevas.** Hasta ahora había que crearlas a mano en la
+  consola de Firebase, lo que hacía imposible que otras personas probaran la
+  aplicación por su cuenta. Ahora hay un enlace "Crear una cuenta" en el
+  acceso.
+- **Mostrar/ocultar contraseña** en los cinco campos donde se escribe una:
+  acceso, registro, restablecer y los dos del cambio de clave. Escribir una
+  contraseña larga a ciegas en un teléfono es la causa más frecuente de "no
+  puedo entrar" cuando la clave era correcta. El botón anuncia su estado a
+  los lectores de pantalla y devuelve el foco al campo, para poder seguir
+  escribiendo sin volver a tocarlo.
+- **9 pruebas** del registro. Total: **550**.
+
+### Sobre el registro abierto
+
+Cualquiera con el enlace puede crear una cuenta. **Esto no da acceso a los
+datos de nadie**: las reglas de Firestore solo permiten ver un caso a quien
+tiene una membresía activa en él, así que una cuenta nueva empieza vacía y
+solo ve lo suyo. Para compartir un caso hay que invitar explícitamente a la
+otra persona.
+
+Es la opción adecuada para probar con otras personas. Si más adelante se
+quisiera cerrar el registro —solo por invitación—, es un cambio acotado.
+
+### Decisiones
+
+- **El correo de verificación se envía sin esperarlo y sin propagar su
+  fallo.** La cuenta ya está creada y es utilizable; quedarse sin poder
+  entrar porque falló un envío sería absurdo.
+- **El nombre es obligatorio.** Sin él, la otra parte no sabría quién es
+  quien aparece en los gastos.
+- **La contraseña del registro cumple la misma política** que el cambio de
+  clave: diez caracteres, mayúscula, minúscula, número y símbolo.
+- Si el correo ya está en uso, el error aparece **junto a ese campo**, que es
+  donde hay que corregirlo.
+
 ## [0.5.0-alpha.1] — Build 1.8: Registrar un pago
 
 Cierra el ciclo completo del sistema: **gastos → reembolsos → liquidación →
