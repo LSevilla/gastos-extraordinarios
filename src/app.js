@@ -203,10 +203,14 @@ async function main() {
   const participantRepo = new SyncingParticipantRepository({
     inner: rawParticipantRepo,
     syncEngine,
+    operationQueueRepo,
+    clock,
   });
   const beneficiaryRepo = new SyncingBeneficiaryRepository({
     inner: rawBeneficiaryRepo,
     syncEngine,
+    operationQueueRepo,
+    clock,
   });
   const paymentRepo = new SyncingPaymentRepository({
     inner: rawPaymentRepo,

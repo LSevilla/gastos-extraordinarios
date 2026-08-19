@@ -2,6 +2,33 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.3] — Crear un caso nuevo fallaba
+
+### Corregido
+
+`participantRepo.putInTransaction is not a function`.
+
+Al agregar la sincronización de participantes y beneficiarios, sus
+decoradores quedaron **incompletos**: no exponían `putInTransaction`, que sí
+tiene el repositorio que envuelven. Ese método lo usa únicamente el alta de un
+caso, así que el defecto solo aparecía al **crear un caso desde cero** — el
+camino que menos se recorre una vez que ya existe uno, y justo el que sigue
+cada persona nueva que prueba la aplicación.
+
+- Ambos decoradores exponen ahora `putInTransaction`, y **encolan la
+  sincronización en el mismo commit**: hacerlo después dejaría, ante un corte,
+  un caso cuyos participantes nunca se suben y que otro dispositivo recibiría
+  vacío.
+
+### Agregado
+
+- **6 pruebas** contra esta clase de error: comparan por reflexión los métodos
+  de cada repositorio con los de su decorador y fallan si falta alguno. Un
+  decorador incompleto es indistinguible del original hasta que alguien llama
+  al método que falta, y ahora eso se detecta antes de publicar.
+
+Total: **556** pruebas.
+
 ## [0.5.0-alpha.2] — Registro de cuentas y ver la contraseña
 
 ### Agregado
