@@ -2,6 +2,55 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.5] — Identidad visual
+
+Trabajo exclusivamente de presentación. Ninguna regla de negocio cambia.
+
+**Dirección**: la aplicación trata de dinero entre dos personas separadas, por
+sus hijos. Un azul corporativo la convierte en un trámite; un tono festivo
+sería insensible. La paleta busca el punto intermedio — verde azulado
+profundo, sereno pero no bancario, con acentos cálidos.
+
+### Agregado
+
+- **Un color propio para cada hijo** (`beneficiary-colors.js`). Es el elemento
+  distintivo, y es funcional: en la lista de gastos, lo primero que se quiere
+  saber no es el monto sino de quién es. El color se reconoce antes de leer.
+
+  Los colores se derivan del identificador, no del orden de la lista, así que
+  el mismo hijo conserva el suyo en cualquier dispositivo y momento — si
+  cambiara, dejaría de ser señal y sería ruido. La paleta evita el rosa/azul
+  por género: sería una lectura que la aplicación no debe imponer sobre los
+  hijos de nadie.
+
+  El punto de color **nunca va solo**: siempre acompaña al nombre en texto.
+
+- **Color por acción** en el menú principal. Reconocer a dónde se entra sin
+  leer la etiqueta ahorra un paso en un teléfono usado a una mano.
+- **8 pruebas nuevas**: estabilidad del color por hijo y trazo de los iconos.
+
+### Cambiado
+
+- **Iconos redibujados** con trazo redondeado en extremos y uniones. Varios
+  cambiaron de metáfora: el estado de cuenta pasa a ser una balanza —dos
+  partes que se comparan—, el pago una mano que entrega en vez de otra
+  tarjeta, y el gasto una boleta con el borde dentado.
+- **En la lista de gastos, el punto del hijo reemplaza al icono de gasto**:
+  todas las filas son gastos, así que ese icono no distinguía nada.
+- **Tipografía**: `ui-rounded` da SF Pro Rounded en Apple —las letras del
+  sistema con terminaciones redondeadas— sin descargar nada. Se descartó una
+  fuente externa a propósito: la aplicación funciona sin conexión y sería una
+  dependencia de red que puede fallar justo cuando más falta hace.
+- Escala tipográfica más generosa y radios más suaves.
+
+### Accesibilidad
+
+- Las animaciones de los iconos respetan `prefers-reduced-motion`.
+- El color es siempre una señal **adicional**: quien no lo distinga usa la
+  aplicación exactamente igual.
+
+Total: **565** pruebas.
+
 ## [0.5.0-alpha.4] — "Administrar beneficiarios" fallaba al pulsarlo
 
 ### Corregido

@@ -8,7 +8,7 @@
 // Build 1.4: incluye totales (solo activos), indicador de sincronización,
 // y distinción visual activo/anulado — sin mostrar nunca "Firestore",
 // "IndexedDB" ni "OperationQueue" (informe del Build 1.4, sección 13).
-import { icon } from '../components/icons.js';
+import { beneficiaryColor } from '../components/beneficiary-colors.js';
 import { createBreadcrumb } from '../components/breadcrumb.js';
 import { syncStatusLabel } from '../components/role-labels.js';
 
@@ -152,8 +152,15 @@ export async function renderExpensesList(root, deps) {
           ? ` · ${syncStatusLabel('pending')}`
           : '';
         const cancelledBadge = expense.isDeleted() ? ' · Anulado' : '';
+        // El punto de color del hijo reemplaza al icono genérico de gasto:
+        // todas las filas son gastos, así que ese icono no distinguía nada.
+        // El color sí — permite reconocer de quién es cada gasto antes de
+        // leer el nombre, que es lo primero que se busca en esta lista.
+        const dotColor = beneficiaryColor(expense.beneficiaryId);
+        const initial =
+          beneficiaryName(expense.beneficiaryId).trim().charAt(0).toUpperCase() || '?';
         row.innerHTML = `
-          <span class="action-row__icon">${icon('expense')}</span>
+          <span class="beneficiary-dot" style="--dot-color:${dotColor.color};--dot-soft:${dotColor.soft}" aria-hidden="true">${escapeHtml(initial)}</span>
           <span style="flex:1;text-align:left;">
             <span class="action-row__label" style="display:block;">${escapeHtml(beneficiaryName(expense.beneficiaryId))} · ${escapeHtml(expense.category)}</span>
             <span class="muted-text">${formatDate(expense.date)} · $${expense.amount.getAmount().toLocaleString('es-CL')} · ${DOCUMENT_STATUS_LABELS[expense.documentStatus]}${cancelledBadge}${syncBadge}</span>

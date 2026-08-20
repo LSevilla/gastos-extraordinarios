@@ -29,10 +29,17 @@ test('existen todos los íconos requeridos por la pantalla principal', () => {
   }
 });
 
+test('cada ícono usa trazo redondeado en extremos y uniones', () => {
+  for (const [name, markup] of Object.entries(icons)) {
+    assert.match(markup, /stroke-linecap="round"/, `${name} debe tener las puntas redondeadas`);
+    assert.match(markup, /stroke-linejoin="round"/, `${name} debe tener las uniones redondeadas`);
+  }
+});
+
 test('cada ícono es un <svg> válido con viewBox consistente y aria-hidden', () => {
   for (const name of REQUIRED_ICONS) {
     const markup = icons[name];
-    assert.match(markup, /^<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">/);
+    assert.match(markup, /^<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"/);
     assert.match(markup, /<\/svg>$/);
   }
 });

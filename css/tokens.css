@@ -4,14 +4,41 @@
  */
 
 :root {
-  /* ---- Color ---- */
-  --color-primario: #1e5aa8;
-  --color-primario-oscuro: #153b63;
-  --color-fondo: #f5f7fa;
+  /* ---- Color ----
+   *
+   * DIRECCIÓN: la aplicación trata de dinero entre dos personas separadas,
+   * por sus hijos. Un azul corporativo la vuelve un trámite; un tono festivo
+   * sería insensible. La paleta busca el punto intermedio: verde azulado
+   * profundo —sereno, no bancario— con acentos cálidos que dan vida sin
+   * frivolizar.
+   *
+   * Cada acción del menú tiene su color. No es adorno: permite reconocer
+   * dónde estás sin leer, que en un teléfono a una mano importa.
+   */
+  --color-primario: #0f6f68;
+  --color-primario-oscuro: #0a4f4a;
+  --color-primario-suave: #e6f4f2;
+  --color-fondo: #f7f6f3;
   --color-superficie: #ffffff;
-  --color-texto: #1f2937;
-  --color-texto-secundario: #667085;
-  --color-borde: #d8dee8;
+  --color-texto: #1c2321;
+  --color-texto-secundario: #5f6b68;
+  --color-borde: #e2e0da;
+
+  /* Acentos por acción — cada una reconocible por su color. */
+  --color-accion-expense: #0f6f68;
+  --color-accion-expense-suave: #e6f4f2;
+  --color-accion-reimbursement: #b06d1f;
+  --color-accion-reimbursement-suave: #fdf3e3;
+  --color-accion-payment: #2f6f4f;
+  --color-accion-payment-suave: #e8f4ed;
+  --color-accion-statement: #4a5aa8;
+  --color-accion-statement-suave: #eceefa;
+  --color-accion-document: #8a5a9e;
+  --color-accion-document-suave: #f5edf8;
+  --color-accion-manageCase: #5f6b68;
+  --color-accion-manageCase-suave: #eeefed;
+  --color-accion-expensesList: #0f6f68;
+  --color-accion-expensesList-suave: #e6f4f2;
 
   --color-exito: #27875b;
   --color-advertencia: #b7791f;
@@ -24,15 +51,23 @@
   --color-anulado: #667085;
 
   /* ---- Tipografía ---- */
-  --font-family-base: Inter, 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-size-h1: 24px;
+  /* `ui-rounded` da SF Pro Rounded en Apple: mismas letras que el sistema,
+   * con las terminaciones redondeadas. Aporta calidez inmediata en el
+   * teléfono SIN descargar nada — la aplicación funciona sin conexión y una
+   * fuente externa sería una dependencia de red que puede fallar justo
+   * cuando más falta hace. En el resto de sistemas cae a la pila habitual.
+   */
+  --font-family-base:
+    ui-rounded, 'SF Pro Rounded', -apple-system, 'Segoe UI Variable', 'Segoe UI', Inter, system-ui,
+    sans-serif;
+  --font-size-h1: 27px;
   --font-size-h2: 18px;
-  --font-size-normal: 14px;
+  --font-size-normal: 15px;
   --font-size-auxiliar: 12px;
   --font-size-etiqueta: 12px;
-  --font-size-valor-destacado: 28px;
+  --font-size-valor-destacado: 32px;
   --font-size-valor-tabla: 14px;
-  --font-weight-h1: 600;
+  --font-weight-h1: 700;
   --font-weight-h2: 600;
   --font-weight-normal: 400;
   --font-weight-etiqueta: 500;
@@ -48,8 +83,8 @@
   --space-12: 48px;
 
   /* ---- Bordes y radios ---- */
-  --radius-card: 12px;
-  --radius-button: 8px;
+  --radius-card: 16px;
+  --radius-button: 12px;
   --radius-modal: 16px;
   --radius-dropdown: 8px;
   --radius-badge: 999px;

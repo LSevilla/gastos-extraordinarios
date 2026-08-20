@@ -175,6 +175,16 @@ export function renderHome(root, deps) {
 
     const iconWrap = document.createElement('span');
     iconWrap.className = 'action-row__icon';
+    // Color propio por acción: se reconoce a dónde se entra sin leer la
+    // etiqueta, que en un teléfono usado a una mano ahorra un paso.
+    iconWrap.style.setProperty(
+      '--accion-color',
+      `var(--color-accion-${action.id}, var(--color-primario))`,
+    );
+    iconWrap.style.setProperty(
+      '--accion-suave',
+      `var(--color-accion-${action.id}-suave, var(--color-primario-suave))`,
+    );
     iconWrap.innerHTML = icon(action.icon);
 
     const label = document.createElement('span');

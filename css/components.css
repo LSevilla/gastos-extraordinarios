@@ -740,3 +740,58 @@ body.has-modal-open {
 .password-field__toggle:hover {
   background: var(--color-fondo);
 }
+
+/* ---- Punto de color por hijo ----
+   Acompaña siempre al nombre, nunca lo reemplaza: el color acelera el
+   reconocimiento, pero la aplicación debe funcionar igual sin distinguirlo. */
+.beneficiary-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: var(--dot-soft, var(--color-primario-suave));
+  color: var(--dot-color, var(--color-primario));
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---- Tarjetas de acción de la pantalla principal ----
+   Cada acción lleva su color. Reconocer dónde se va a entrar sin leer la
+   etiqueta importa en un teléfono usado a una mano. */
+.action-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 14px;
+  background: var(--accion-suave, var(--color-primario-suave));
+  color: var(--accion-color, var(--color-primario));
+  transition: transform 140ms ease;
+}
+.action-card:hover .action-row__icon {
+  transform: scale(1.06) rotate(-2deg);
+}
+.action-card:active .action-row__icon {
+  transform: scale(0.97);
+}
+.action-row__icon .icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.9;
+}
+
+/* Quien pidió menos movimiento no debería recibir ninguno. */
+@media (prefers-reduced-motion: reduce) {
+  .action-card__icon,
+  .action-card:hover .action-card__icon,
+  .action-card:active .action-row__icon {
+    transition: none;
+    transform: none;
+  }
+}
