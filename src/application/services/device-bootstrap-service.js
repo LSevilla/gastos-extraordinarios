@@ -17,8 +17,10 @@
 import { Case } from '../../domain/cases/case.js';
 import { Participant } from '../../domain/participants/participant.js';
 import { Beneficiary } from '../../domain/beneficiaries/beneficiary.js';
+import { PercentagePeriod } from '../../domain/participants/percentage-period.js';
 import { AppSettings } from '../../domain/configuration/app-settings.js';
 import { Identifier } from '../../shared/identifier.js';
+import { Percentage } from '../../shared/percentage.js';
 import { Result } from '../../shared/result.js';
 
 /**
@@ -218,6 +220,23 @@ export class DeviceBootstrapService {
             ),
           );
           beneficiaryCount += 1;
+        }
+        // Sin los tramos, los gastos descargados no se pueden repartir.
+        for (const raw of members.percentagePeriods ?? []) {
+          if (!this.deps.percentagePeriodRepo) break;
+          await this.deps.percentagePeriodRepo.save(
+            new PercentagePeriod(
+              Identifier.from(raw.id).getValue(),
+              Identifier.from(raw.caseId).getValue(),
+              Identifier.from(raw.participantAId).getValue(),
+              Identifier.from(raw.participantBId).getValue(),
+              Percentage.of(raw.percentageA).getValue(),
+              Percentage.of(raw.percentageB).getValue(),
+              raw.validFrom ? new Date(raw.validFrom) : this.deps.clock.utcNow(),
+              raw.validTo ? new Date(raw.validTo) : null,
+              raw.isCurrent !== false,
+            ),
+          );
         }
       } catch (error) {
         // Se continúa igualmente: el caso ya está recuperado y la pantalla

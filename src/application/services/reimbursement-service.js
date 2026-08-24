@@ -85,21 +85,6 @@ export class ReimbursementService {
   }
 
   /**
-   * Resuelve el tramo de vigencia CONGELADO en el gasto. Se hace buscando
-   * entre los tramos del caso en memoria, deliberadamente: no se agrega un
-   * `findById()` a PercentagePeriodRepository solo para esto — un caso
-   * tiene un puñado de tramos, no miles, y ampliar la interfaz de un
-   * repositorio es un cambio de contrato que no hace falta pagar acá.
-   * @param {import('../../domain/expenses/expense.js').Expense} expense
-   * @returns {Promise<import('../../domain/participants/percentage-period.js').PercentagePeriod|null>}
-   */
-  async #resolveFrozenPercentagePeriod(expense) {
-    if (!expense.percentagePeriodId) return null;
-    const periods = await this.deps.percentagePeriodRepo.findAllByCaseId(expense.caseId);
-    return periods.find((period) => period.id.equals(expense.percentagePeriodId)) ?? null;
-  }
-
-  /**
    * Impide que lo reembolsado supere al gasto original, lo que dejaría un
    * neto negativo (alguien debiéndole plata al otro por un gasto que ya se
    * cubrió por completo). Se evalúa contra el estado RESULTANTE, excluyendo
@@ -316,8 +301,16 @@ export class ReimbursementService {
     if (accessResult.isFailure()) return Result.fail(accessResult.getError());
 
     const reimbursements = await this.deps.reimbursementRepo.findAllByExpenseId(expenseId);
-    const percentagePeriod = await this.#resolveFrozenPercentagePeriod(expense);
-    return Result.ok(calculateExpenseNet(expense, reimbursements, percentagePeriod));
+    const periods = await this.deps.percentagePeriodRepo.findAllByCaseId(expense.caseId);
+    const percentagePeriod = expense.percentagePeriodId
+      ? (periods.find((period) => period.id.equals(expense.percentagePeriodId)) ?? null)
+      : null;
+    // Tramo vigente del caso como respaldo: todo gasto debe repartirse,
+    // tenga o no un tramo congelado propio.
+    const fallbackPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
+    return Result.ok(
+      calculateExpenseNet(expense, reimbursements, percentagePeriod, fallbackPeriod),
+    );
   }
 
   /**

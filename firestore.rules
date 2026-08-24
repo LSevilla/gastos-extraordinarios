@@ -247,6 +247,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Tramos de porcentajes ----
+    // Sin ellos, un gasto sincronizado llega a otro dispositivo apuntando a
+    // un tramo inexistente y no se puede repartir. Sin borrado físico: un
+    // tramo eliminado dejaría gastos históricos sin forma de recalcularse.
+
+    match /percentagePeriods/{periodId} {
+      allow read: if canRead(resource.data.caseId);
+      allow create: if isSignedIn() && canWrite(request.resource.data.caseId);
+      allow update: if isSignedIn()
+        && canWrite(resource.data.caseId)
+        && request.resource.data.caseId == resource.data.caseId;
+      allow delete: if false;
+    }
+
     // ---- Invitaciones ----
 
     match /invitations/{invitationId} {

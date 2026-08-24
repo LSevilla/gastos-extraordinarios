@@ -37,6 +37,7 @@ import { SyncingSettlementRepository } from './infrastructure/synchronization/sy
 import { SyncingParticipantRepository } from './infrastructure/synchronization/syncing-participant-repository.js';
 import { SyncingBeneficiaryRepository } from './infrastructure/synchronization/syncing-beneficiary-repository.js';
 import { SyncingPaymentRepository } from './infrastructure/synchronization/syncing-payment-repository.js';
+import { SyncingPercentagePeriodRepository } from './infrastructure/synchronization/syncing-percentage-period-repository.js';
 import { IndexedDbPaymentRepository } from './infrastructure/indexeddb/repositories/indexeddb-payment-repository.js';
 import { PaymentService } from './application/services/payment-service.js';
 import { renderPayments } from './presentation/views/payments-view.js';
@@ -136,7 +137,7 @@ async function main() {
 
   const rawCaseRepo = new IndexedDbCaseRepository(db);
   const rawParticipantRepo = new IndexedDbParticipantRepository(db);
-  const percentagePeriodRepo = new IndexedDbPercentagePeriodRepository(db);
+  const rawPercentagePeriodRepo = new IndexedDbPercentagePeriodRepository(db);
   const rawBeneficiaryRepo = new IndexedDbBeneficiaryRepository(db);
   const appSettingsRepo = new IndexedDbAppSettingsRepository(db);
   const rawExpenseRepo = new IndexedDbExpenseRepository(db);
@@ -168,6 +169,7 @@ async function main() {
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
     paymentRepo: rawPaymentRepo,
+    percentagePeriodRepo: rawPercentagePeriodRepo,
     firestore,
     firestoreModule,
     clock,
@@ -214,6 +216,12 @@ async function main() {
   });
   const paymentRepo = new SyncingPaymentRepository({
     inner: rawPaymentRepo,
+    syncEngine,
+    operationQueueRepo,
+    clock,
+  });
+  const percentagePeriodRepo = new SyncingPercentagePeriodRepository({
+    inner: rawPercentagePeriodRepo,
     syncEngine,
     operationQueueRepo,
     clock,
@@ -360,6 +368,7 @@ async function main() {
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
     paymentRepo: rawPaymentRepo,
+    percentagePeriodRepo: rawPercentagePeriodRepo,
     clock,
   });
 
@@ -370,7 +379,7 @@ async function main() {
   const initialUploadService = new InitialUploadService({
     participantRepo: rawParticipantRepo,
     beneficiaryRepo: rawBeneficiaryRepo,
-    paymentRepo: rawPaymentRepo,
+    percentagePeriodRepo: rawPercentagePeriodRepo,
     syncEngine,
     appSettingsRepo,
     clock,

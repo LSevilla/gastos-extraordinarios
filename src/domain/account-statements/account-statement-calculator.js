@@ -77,6 +77,7 @@ export function selectSettleableExpenses(expenses, periodStart, periodEnd) {
  *   expenses: import('../expenses/expense.js').Expense[],
  *   reimbursementsByExpenseId: Map<string, import('../reimbursements/reimbursement.js').Reimbursement[]>,
  *   percentagePeriodsById: Map<string, import('../participants/percentage-period.js').PercentagePeriod>,
+ *   fallbackPeriod?: import('../participants/percentage-period.js').PercentagePeriod|null,
  *   participantAId: import('../../shared/identifier.js').Identifier,
  *   participantBId: import('../../shared/identifier.js').Identifier,
  *   periodStart: Date,
@@ -94,6 +95,7 @@ export function calculateAccountStatement({
   periodStart,
   periodEnd,
   lastSettledUntil = null,
+  fallbackPeriod = null,
 }) {
   const zero = Money.zero('CLP');
 
@@ -113,7 +115,10 @@ export function calculateAccountStatement({
     const percentagePeriod = expense.percentagePeriodId
       ? (percentagePeriodsById.get(expense.percentagePeriodId.toString()) ?? null)
       : null;
-    const net = calculateExpenseNet(expense, reimbursements, percentagePeriod);
+    // Con respaldo: un gasto sin tramo congelado se reparte igual, con el
+    // tramo vigente del caso. Antes quedaba fuera del reparto y el saldo lo
+    // ignoraba en silencio.
+    const net = calculateExpenseNet(expense, reimbursements, percentagePeriod, fallbackPeriod);
 
     totalOriginal = totalOriginal.add(net.originalAmount);
     totalReimbursed = totalReimbursed.add(net.reimbursedAmount);

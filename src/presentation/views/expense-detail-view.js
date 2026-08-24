@@ -160,7 +160,15 @@ export async function renderExpenseDetail(root, deps) {
       );
     } else {
       rows.push(
-        `<p class="muted-text">Este gasto no tiene un tramo de porcentajes asociado, así que no se puede repartir automáticamente.</p>`,
+        `<p class="muted-text">Para repartir este gasto falta definir los porcentajes del caso. Puedes hacerlo en Administrar el caso.</p>`,
+      );
+    }
+    if (net.usedFallbackPercentages) {
+      // Se dice explícitamente: el reparto es correcto, pero usa los
+      // porcentajes vigentes hoy y no los que regían cuando se registró el
+      // gasto. Callarlo sería aparentar una precisión que no se tiene.
+      rows.push(
+        `<p class="muted-text">Repartido con los porcentajes vigentes del caso, porque este gasto no guardó los suyos.</p>`,
       );
     }
     if (net.exceedsOriginal) {

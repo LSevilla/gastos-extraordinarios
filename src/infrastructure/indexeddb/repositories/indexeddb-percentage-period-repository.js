@@ -59,6 +59,16 @@ export class IndexedDbPercentagePeriodRepository extends PercentagePeriodReposit
   }
 
   /** @param {Identifier} caseId */
+  /** @param {import('../../../shared/identifier.js').Identifier} id */
+  async findById(id) {
+    return runInTransaction(this.db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', async (tx) => {
+      const record = await promisifyRequest(
+        tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get(id.toString()),
+      );
+      return record ? fromRecord(record) : null;
+    });
+  }
+
   async findCurrentByCaseId(caseId) {
     return runInTransaction(this.db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', async (tx) => {
       const index = tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).index('caseId');

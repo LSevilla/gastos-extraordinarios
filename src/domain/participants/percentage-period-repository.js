@@ -5,6 +5,16 @@ export class PercentagePeriodRepository {
     throw new Error('PercentagePeriodRepository.save no implementado.');
   }
 
+  /**
+   * Necesario para sincronizar un tramo concreto: el motor resuelve por id,
+   * no por caso.
+   * @param {import('../../shared/identifier.js').Identifier} _id
+   * @returns {Promise<import('./percentage-period.js').PercentagePeriod|null>}
+   */
+  async findById(_id) {
+    throw new Error('PercentagePeriodRepository.findById no implementado.');
+  }
+
   /** @param {import('../../shared/identifier.js').Identifier} _caseId @returns {Promise<import('./percentage-period.js').PercentagePeriod|null>} */
   async findCurrentByCaseId(_caseId) {
     throw new Error('PercentagePeriodRepository.findCurrentByCaseId no implementado.');

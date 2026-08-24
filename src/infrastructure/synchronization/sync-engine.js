@@ -23,6 +23,10 @@ const SETTLEMENTS_COLLECTION = 'settlements';
 const PARTICIPANTS_COLLECTION = 'participants';
 const BENEFICIARIES_COLLECTION = 'beneficiaries';
 const PAYMENTS_COLLECTION = 'payments';
+// Los tramos de porcentajes tampoco se sincronizaban: un gasto llegaba a otro
+// dispositivo apuntando a un tramo que allí no existía, y quedaba sin
+// repartir.
+const PERCENTAGE_PERIODS_COLLECTION = 'percentagePeriods';
 
 export class SyncEngine {
   /**
@@ -35,6 +39,7 @@ export class SyncEngine {
    *   participantRepo?: import('../../domain/participants/participant-repository.js').ParticipantRepository,
    *   beneficiaryRepo?: import('../../domain/beneficiaries/beneficiary-repository.js').BeneficiaryRepository,
    *   paymentRepo?: import('../../domain/payments/payment-repository.js').PaymentRepository,
+   *   percentagePeriodRepo?: import('../../domain/participants/percentage-period-repository.js').PercentagePeriodRepository,
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
@@ -149,6 +154,19 @@ export class SyncEngine {
   }
 
   /**
+   * @param {Identifier} periodId
+   */
+  async enqueuePercentagePeriodSync(periodId) {
+    await this.deps.operationQueueRepo.save(
+      OperationQueueEntry.create(
+        'sync:percentagePeriod',
+        { periodId: periodId.toString() },
+        this.deps.clock,
+      ),
+    );
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.
@@ -204,6 +222,16 @@ export class SyncEngine {
             findById: (id) => this.deps.paymentRepo.findById(id),
             push: (entity) => this.#pushPaymentToFirestore(entity),
             logLabel: 'sync:payment',
+          },
+        );
+      } else if (entry.type === 'sync:percentagePeriod') {
+        ok = await this.#syncEntry(
+          entry,
+          (payload) => Identifier.from(payload.periodId).getValue(),
+          {
+            findById: (id) => this.deps.percentagePeriodRepo.findById(id),
+            push: (entity) => this.#pushPercentagePeriodToFirestore(entity),
+            logLabel: 'sync:percentagePeriod',
           },
         );
       } else if (entry.type === 'sync:participant') {
@@ -454,6 +482,23 @@ export class SyncEngine {
   }
 
   /**
+   * @param {import('../../domain/participants/percentage-period.js').PercentagePeriod} period
+   */
+  async #pushPercentagePeriodToFirestore(period) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    await fs.setDoc(fs.doc(firestore, PERCENTAGE_PERIODS_COLLECTION, period.id.toString()), {
+      caseId: period.caseId.toString(),
+      participantAId: period.participantAId.toString(),
+      participantBId: period.participantBId.toString(),
+      percentageA: period.percentageA.toNumber(),
+      percentageB: period.percentageB.toNumber(),
+      validFrom: period.validFrom ? period.validFrom.toISOString() : null,
+      validTo: period.validTo ? period.validTo.toISOString() : null,
+      isCurrent: period.isCurrent,
+    });
+  }
+
+  /**
    * Descarga participantes y beneficiarios de un caso. A diferencia de las
    * escuchas, esto es una lectura puntual: la usa el arranque en frío, que
    * necesita los datos ANTES de poder pintar nada.
@@ -474,6 +519,7 @@ export class SyncEngine {
     return {
       participants: await load(PARTICIPANTS_COLLECTION),
       beneficiaries: await load(BENEFICIARIES_COLLECTION),
+      percentagePeriods: await load(PERCENTAGE_PERIODS_COLLECTION),
     };
   }
 

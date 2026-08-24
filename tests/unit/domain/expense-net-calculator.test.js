@@ -186,3 +186,49 @@ test('la lista de reembolsos ausente o vacía se trata igual que "sin reembolsos
   const net = calculateExpenseNet(buildExpense(100000), undefined, null);
   assert.equal(net.netAmount.getAmount(), 100000);
 });
+
+// ---- Reparto con tramo de respaldo ----
+
+test('un gasto SIN tramo congelado se reparte igual, con el tramo vigente del caso', () => {
+  const vigente = buildPeriod(60, 40);
+
+  const net = calculateExpenseNet(buildExpense(100000, null), [], null, vigente);
+
+  // Antes este gasto quedaba sin repartir y la pantalla decía que no se
+  // podía. Todo gasto debe repartirse: es el cálculo que la aplicación
+  // existe para hacer.
+  assert.equal(net.hasPercentagePeriod, true);
+  assert.equal(net.shareA.share.getAmount(), 60000);
+  assert.equal(net.shareB.share.getAmount(), 40000);
+});
+
+test('se informa cuándo el reparto usó el tramo vigente en vez del congelado', () => {
+  const vigente = buildPeriod(60, 40);
+
+  const conCongelado = calculateExpenseNet(buildExpense(100000, vigente.id), [], vigente, vigente);
+  const conRespaldo = calculateExpenseNet(buildExpense(100000, null), [], null, vigente);
+
+  assert.equal(conCongelado.usedFallbackPercentages, false);
+  assert.equal(
+    conRespaldo.usedFallbackPercentages,
+    true,
+    'la interfaz debe poder decirlo en vez de fingir una precisión que no tiene',
+  );
+});
+
+test('el tramo CONGELADO tiene prioridad sobre el vigente: no se reescribe la historia', () => {
+  const congelado = buildPeriod(60, 40);
+  const vigenteNuevo = buildPeriod(90, 10);
+
+  const net = calculateExpenseNet(buildExpense(100000, congelado.id), [], congelado, vigenteNuevo);
+
+  assert.equal(net.shareA.share.getAmount(), 60000, 'debe usar el 60/40 congelado, no el 90/10');
+  assert.equal(net.usedFallbackPercentages, false);
+});
+
+test('sin tramo congelado NI vigente, se informa que no se puede repartir', () => {
+  const net = calculateExpenseNet(buildExpense(100000, null), [], null, null);
+
+  assert.equal(net.hasPercentagePeriod, false);
+  assert.equal(net.shareA, null);
+});

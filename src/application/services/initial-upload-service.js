@@ -40,8 +40,14 @@ export class InitialUploadService {
    * @returns {Promise<Result<{uploaded: number, skipped: boolean}>>}
    */
   async uploadExistingCaseMembers(caseId) {
+    // La marca lleva versión porque el contenido de la subida cambió: la
+    // primera versión no incluía los tramos de porcentajes, así que un
+    // dispositivo que ya la había hecho se la saltaría para siempre y sus
+    // gastos seguirían sin poder repartirse en el otro aparato.
+    const UPLOAD_VERSION = 'v2-con-tramos';
+    const marker = `${caseId.toString()}#${UPLOAD_VERSION}`;
     const settings = await this.deps.appSettingsRepo.get();
-    if (settings?.initialUploadDoneForCaseId === caseId.toString()) {
+    if (settings?.initialUploadDoneForCaseId === marker) {
       return Result.ok({ uploaded: 0, skipped: true });
     }
 
@@ -58,13 +64,23 @@ export class InitialUploadService {
         await this.deps.syncEngine.enqueueBeneficiarySync(beneficiary.id);
         uploaded += 1;
       }
+
+      // Los tramos de porcentajes también existían antes de que hubiera
+      // sincronización: sin subirlos, los gastos llegan sin poder repartirse.
+      if (this.deps.percentagePeriodRepo) {
+        const periods = await this.deps.percentagePeriodRepo.findAllByCaseId(caseId);
+        for (const period of periods) {
+          await this.deps.syncEngine.enqueuePercentagePeriodSync(period.id);
+          uploaded += 1;
+        }
+      }
     } catch (error) {
       // No se marca como hecho: así se reintenta en el próximo arranque.
       return Result.ok({ uploaded, skipped: false, error: String(error) });
     }
 
     if (settings) {
-      settings.initialUploadDoneForCaseId = caseId.toString();
+      settings.initialUploadDoneForCaseId = marker;
       settings.updatedAt = this.deps.clock.utcNow();
       await this.deps.appSettingsRepo.save(settings);
     }

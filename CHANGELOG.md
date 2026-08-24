@@ -2,6 +2,48 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.6] — Todo gasto se reparte
+
+### Corregido
+
+Un gasto podía quedar **sin repartir**, mostrando "no tiene un tramo de
+porcentajes asociado". Dos causas, ambas corregidas:
+
+- **Los tramos de porcentajes nunca se sincronizaban.** Un gasto llegaba a
+  otro dispositivo apuntando a un tramo que allí no existía. Es el mismo
+  defecto que ya apareció con participantes y beneficiarios: se sincronizaban
+  los movimientos pero no la estructura del caso.
+- **No había respaldo.** Si el gasto no tenía tramo congelado —registrado
+  antes de que existieran, o con su tramo no descargado—, la aplicación se
+  rendía en vez de usar los porcentajes vigentes del caso.
+
+Ahora **todo gasto se reparte**. El orden de prioridad es explícito:
+
+1. El tramo **congelado** en el gasto, si lo tiene. Cambiar los porcentajes no
+   reescribe la historia.
+2. Si no, el tramo **vigente** del caso, y la pantalla lo dice: _"Repartido
+   con los porcentajes vigentes del caso, porque este gasto no guardó los
+   suyos"_. Callarlo sería aparentar una precisión que no se tiene.
+3. Solo si el caso no tiene ningún tramo se informa que faltan porcentajes,
+   ahora indicando dónde definirlos.
+
+### Agregado
+
+- **`sync:percentagePeriod`** con su decorador, descarga en el arranque en
+  frío, subida inicial de los tramos ya existentes y reglas de Firestore.
+- **`PercentagePeriodRepository.findById()`**, que el motor necesita para
+  resolver un tramo concreto.
+- **La marca de la subida inicial ahora lleva versión.** Un dispositivo que ya
+  la había hecho se la saltaría para siempre, y sus tramos nunca subirían.
+- **5 pruebas nuevas** del reparto con respaldo y de la marca versionada.
+
+Total: **570** pruebas.
+
+### Requiere acción
+
+**Publicar `firestore.rules`.** Sin las reglas de `percentagePeriods`, los
+tramos no suben y el problema persiste en el segundo dispositivo.
+
 ## [0.5.0-alpha.5] — Identidad visual
 
 Trabajo exclusivamente de presentación. Ninguna regla de negocio cambia.

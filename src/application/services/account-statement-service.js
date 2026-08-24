@@ -174,6 +174,7 @@ export class AccountStatementService {
         expenses,
         reimbursementsByExpenseId: await this.#buildReimbursementIndex(expenses),
         percentagePeriodsById: new Map(periods.map((period) => [period.id.toString(), period])),
+        fallbackPeriod: periods.length > 0 ? periods[periods.length - 1] : null,
         participantAId,
         participantBId,
         periodStart,
@@ -295,7 +296,12 @@ export class AccountStatementService {
       const percentagePeriod = expense.percentagePeriodId
         ? (percentagePeriodsById.get(expense.percentagePeriodId.toString()) ?? null)
         : null;
-      const net = calculateExpenseNet(expense, reimbursements, percentagePeriod);
+      const net = calculateExpenseNet(
+        expense,
+        reimbursements,
+        percentagePeriod,
+        periods.length > 0 ? periods[periods.length - 1] : null,
+      );
       currentTotal = currentTotal.add(net.netAmount);
       lines.push({ expense, net, isRetroactive: false });
     }

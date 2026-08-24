@@ -30,7 +30,8 @@ import { Money } from '../../shared/money.js';
  * @property {Money} cancelledAmount - suma de los anulados (informativo)
  * @property {number} countedReimbursements - cuántos descontaron de verdad
  * @property {boolean} exceedsOriginal - true si lo reembolsado supera al gasto
- * @property {boolean} hasPercentagePeriod - false si el gasto no tiene tramo congelado
+ * @property {boolean} hasPercentagePeriod - false solo si no hay ningún tramo aplicable
+ * @property {boolean} usedFallbackPercentages - true si se repartió con el tramo vigente del caso, no con el congelado del gasto
  * @property {{participantId: import('../../shared/identifier.js').Identifier, percentage: import('../../shared/percentage.js').Percentage, share: Money}|null} shareA
  * @property {{participantId: import('../../shared/identifier.js').Identifier, percentage: import('../../shared/percentage.js').Percentage, share: Money}|null} shareB
  */
@@ -38,10 +39,16 @@ import { Money } from '../../shared/money.js';
 /**
  * @param {import('./expense.js').Expense} expense
  * @param {import('../reimbursements/reimbursement.js').Reimbursement[]} reimbursements - todos los del gasto, incluidos rechazados y anulados
- * @param {import('../participants/percentage-period.js').PercentagePeriod|null} percentagePeriod - el tramo CONGELADO del gasto, o null si no tiene
+ * @param {import('../participants/percentage-period.js').PercentagePeriod|null} percentagePeriod - el tramo CONGELADO del gasto
+ * @param {import('../participants/percentage-period.js').PercentagePeriod|null} [fallbackPeriod] - tramo vigente del caso, usado solo si el gasto no tiene uno congelado
  * @returns {ExpenseNet}
  */
-export function calculateExpenseNet(expense, reimbursements, percentagePeriod) {
+export function calculateExpenseNet(
+  expense,
+  reimbursements,
+  percentagePeriod,
+  fallbackPeriod = null,
+) {
   const currency = expense.amount.getCurrency();
   const all = reimbursements ?? [];
 
@@ -71,12 +78,24 @@ export function calculateExpenseNet(expense, reimbursements, percentagePeriod) {
     // estado al registrar, pero un gasto editado a la baja después de
     // recibir el reembolso sí puede producirlo — y el usuario debe verlo.
     exceedsOriginal: netAmount.isNegative(),
-    hasPercentagePeriod: Boolean(percentagePeriod),
+    hasPercentagePeriod: Boolean(percentagePeriod ?? fallbackPeriod),
+    usedFallbackPercentages: false,
     shareA: null,
     shareB: null,
   };
 
-  if (!percentagePeriod) return result;
+  // TODO gasto debe repartirse. Si el gasto no tiene tramo congelado —porque
+  // se registró antes de que existieran, o porque su tramo no llegó a este
+  // dispositivo— se usa el tramo vigente del caso en vez de declararlo
+  // irrepartible. Un gasto sin reparto no sirve para nada: es justamente el
+  // cálculo que la aplicación existe para hacer.
+  const effectivePeriod = percentagePeriod ?? fallbackPeriod;
+  if (!effectivePeriod) return result;
+  // Se informa cuándo el reparto NO usó el tramo congelado del propio gasto,
+  // para que la interfaz pueda decirlo en vez de fingir una precisión que no
+  // tiene.
+  result.usedFallbackPercentages = !percentagePeriod && Boolean(fallbackPeriod);
+  result.hasPercentagePeriod = true;
 
   // El resto del redondeo se asigna SIEMPRE a la parte B, de forma
   // determinista, para que shareA + shareB sea exactamente igual a
@@ -84,17 +103,17 @@ export function calculateExpenseNet(expense, reimbursements, percentagePeriod) {
   // separado. (La regla general de a quién beneficia el resto en una
   // liquidación completa pertenece a SettlementCalculationService, todavía
   // fuera de alcance; acá solo se garantiza que la suma cuadre.)
-  const shareAAmount = netAmount.multiplyByPercentage(percentagePeriod.percentageA);
+  const shareAAmount = netAmount.multiplyByPercentage(effectivePeriod.percentageA);
   const shareBAmount = netAmount.subtract(shareAAmount);
 
   result.shareA = {
-    participantId: percentagePeriod.participantAId,
-    percentage: percentagePeriod.percentageA,
+    participantId: effectivePeriod.participantAId,
+    percentage: effectivePeriod.percentageA,
     share: shareAAmount,
   };
   result.shareB = {
-    participantId: percentagePeriod.participantBId,
-    percentage: percentagePeriod.percentageB,
+    participantId: effectivePeriod.participantBId,
+    percentage: effectivePeriod.percentageB,
     share: shareBAmount,
   };
   return result;
