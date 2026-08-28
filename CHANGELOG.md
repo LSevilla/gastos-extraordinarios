@@ -2,6 +2,31 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.7] — La estructura del caso no llegaba a los dispositivos ya instalados
+
+### Corregido
+
+El build anterior hizo que los tramos de porcentajes se sincronizaran, pero
+**solo se descargaban en el arranque en frío**. Un dispositivo que ya tenía el
+caso —como un teléfono en uso— nunca volvía a pedirlos, así que un tramo
+creado o corregido después no le llegaba jamás y sus gastos seguían sin
+repartirse.
+
+El mismo hueco afectaba a participantes y beneficiarios: se descargaban una
+vez y nunca más.
+
+- **Escucha permanente de la estructura del caso** (participantes,
+  beneficiarios y tramos de porcentajes), igual que ya existía para gastos,
+  reembolsos, liquidaciones y pagos. `onSnapshot` entrega además el estado
+  actual al suscribirse, así que también pone al día lo que faltaba.
+- Estas entidades **se aplican tal cual llegan**, sin comparar marcas de
+  tiempo: no las llevan, no compiten con edición local simultánea del mismo
+  campo como sí ocurre con un gasto, y el coste de no aplicarlas es peor —sin
+  ellas los gastos no se pueden repartir.
+- **3 pruebas nuevas** de aplicación de estructura remota.
+
+Total: **573** pruebas.
+
 ## [0.5.0-alpha.6] — Todo gasto se reparte
 
 ### Corregido

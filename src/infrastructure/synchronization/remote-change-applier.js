@@ -45,6 +45,9 @@ export const COMPARABLE_FIELDS = Object.freeze({
   settlement: ['totalNet', 'balanceAmount', 'periodStart', 'periodEnd', 'deletedAt'],
   case: ['name', 'description', 'operationMode', 'deletedAt'],
   payment: ['amount', 'paidAt', 'method', 'reference', 'settlementId', 'notes', 'deletedAt'],
+  participant: ['firstName', 'lastName', 'rut', 'email', 'phone', 'isActive'],
+  beneficiary: ['firstName', 'lastName', 'birthDate', 'notes', 'isActive'],
+  percentagePeriod: ['percentageA', 'percentageB', 'validFrom', 'validTo', 'isCurrent'],
 });
 
 const STORE_FOR_TYPE = Object.freeze({
@@ -53,7 +56,20 @@ const STORE_FOR_TYPE = Object.freeze({
   settlement: STORE_NAMES.SETTLEMENTS,
   case: STORE_NAMES.CASES,
   payment: STORE_NAMES.PAYMENTS,
+  participant: STORE_NAMES.PARTICIPANTS,
+  beneficiary: STORE_NAMES.BENEFICIARIES,
+  percentagePeriod: STORE_NAMES.PERCENTAGE_PERIODS,
 });
+
+/**
+ * Entidades de ESTRUCTURA del caso. No llevan `updatedAt`, así que la
+ * comparación por marcas de tiempo no aplica: se escriben tal cual llegan.
+ *
+ * Es seguro porque no compiten con edición local simultánea del mismo campo
+ * como sí ocurre con un gasto — y porque el coste de no aplicarlas es peor:
+ * sin ellas, los gastos del otro dispositivo no se pueden repartir.
+ */
+const STRUCTURE_TYPES = Object.freeze(['participant', 'beneficiary', 'percentagePeriod']);
 
 export class RemoteChangeApplier {
   /**
@@ -85,6 +101,13 @@ export class RemoteChangeApplier {
     const localRecord = await runInTransaction(this.deps.db, [storeName], 'readonly', (tx) =>
       promisifyRequest(tx.objectStore(storeName).get(entityId)),
     );
+
+    if (STRUCTURE_TYPES.includes(entityType)) {
+      await runInTransaction(this.deps.db, [storeName], 'readwrite', (tx) =>
+        promisifyRequest(tx.objectStore(storeName).put({ ...remoteData, id: entityId })),
+      );
+      return { decision: DECISION.APPLY, entityType, entityId };
+    }
 
     const remoteUpdatedAt = new Date(remoteData.updatedAt);
     const localUpdatedAt = localRecord?.updatedAt ? new Date(localRecord.updatedAt) : null;

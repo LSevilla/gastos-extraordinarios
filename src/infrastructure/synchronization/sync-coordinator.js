@@ -62,6 +62,12 @@ export class SyncCoordinator {
       this.deps.syncEngine.listenForRemotePaymentChanges(caseId, (data, id) =>
         this.#applyRemote('payment', id, data),
       ),
+      // Estructura del caso: sin esto, un dispositivo que ya tenía el caso
+      // nunca recibía los tramos de porcentajes creados después, y sus
+      // gastos quedaban sin repartir.
+      ...this.deps.syncEngine.listenForRemoteCaseStructure(caseId, (entityType, data, id) =>
+        this.#applyRemote(entityType, id, data),
+      ),
     );
 
     // Reconexión y vuelta a primer plano: los dos momentos en que es más

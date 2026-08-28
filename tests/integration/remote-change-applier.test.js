@@ -208,3 +208,55 @@ test('sin cambios de ningún lado no se escribe nada', async () => {
 
   assert.equal(result.decision, DECISION.NOOP);
 });
+
+// ---- Estructura del caso ----
+
+test('un tramo de porcentajes remoto se aplica siempre: sin él los gastos no se reparten', async () => {
+  const { db, applier } = await buildContext();
+
+  const result = await applier.apply('percentagePeriod', 'tramo-1', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 60,
+    percentageB: 40,
+    isCurrent: true,
+  });
+
+  assert.equal(result.decision, DECISION.APPLY);
+  const stored = await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-1')),
+  );
+  assert.ok(stored, 'el tramo debe quedar disponible en este dispositivo');
+  assert.equal(stored.percentageA, 60);
+});
+
+test('participantes y beneficiarios remotos también se aplican', async () => {
+  const { db, applier } = await buildContext();
+
+  await applier.apply('participant', 'p-1', { caseId: 'caso-1', firstName: 'Ana' });
+  await applier.apply('beneficiary', 'b-1', { caseId: 'caso-1', firstName: 'Hijo' });
+
+  const participant = await runInTransaction(db, [STORE_NAMES.PARTICIPANTS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PARTICIPANTS).get('p-1')),
+  );
+  const beneficiary = await runInTransaction(db, [STORE_NAMES.BENEFICIARIES], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.BENEFICIARIES).get('b-1')),
+  );
+
+  assert.equal(participant.firstName, 'Ana');
+  assert.equal(beneficiary.firstName, 'Hijo');
+});
+
+test('la estructura remota se actualiza aunque ya exista localmente', async () => {
+  const { db, applier } = await buildContext();
+  await applier.apply('percentagePeriod', 'tramo-1', { caseId: 'caso-1', percentageA: 50 });
+
+  // Los porcentajes se corrigieron en el otro dispositivo.
+  await applier.apply('percentagePeriod', 'tramo-1', { caseId: 'caso-1', percentageA: 70 });
+
+  const stored = await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-1')),
+  );
+  assert.equal(stored.percentageA, 70, 'la corrección debe llegar');
+});

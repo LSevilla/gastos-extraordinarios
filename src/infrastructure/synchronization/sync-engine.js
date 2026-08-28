@@ -499,6 +499,41 @@ export class SyncEngine {
   }
 
   /**
+   * Escuchas de la ESTRUCTURA del caso: participantes, beneficiarios y
+   * tramos de porcentajes.
+   *
+   * Existen porque descargarlos solo en el arranque en frío no alcanza: un
+   * dispositivo que YA tenía el caso nunca volvía a pedirlos, así que un
+   * tramo creado o corregido después no le llegaba jamás y sus gastos
+   * quedaban sin repartir. `onSnapshot` entrega además el estado actual al
+   * suscribirse, así que esto también pone al día lo que faltaba.
+   *
+   * @param {Identifier} caseId
+   * @param {(entityType: string, remoteData: object, id: string) => Promise<void>} onRemoteChange
+   * @returns {Array<() => void>}
+   */
+  listenForRemoteCaseStructure(caseId, onRemoteChange) {
+    const { firestore, firestoreModule: fs } = this.deps;
+    const listen = (collectionName, entityType) => {
+      const structureQuery = fs.query(
+        fs.collection(firestore, collectionName),
+        fs.where('caseId', '==', caseId.toString()),
+      );
+      const unsubscribe = fs.onSnapshot(structureQuery, (querySnap) => {
+        querySnap.docs.forEach((docSnap) => onRemoteChange(entityType, docSnap.data(), docSnap.id));
+      });
+      this.unsubscribers.push(unsubscribe);
+      return unsubscribe;
+    };
+
+    return [
+      listen(PARTICIPANTS_COLLECTION, 'participant'),
+      listen(BENEFICIARIES_COLLECTION, 'beneficiary'),
+      listen(PERCENTAGE_PERIODS_COLLECTION, 'percentagePeriod'),
+    ];
+  }
+
+  /**
    * Descarga participantes y beneficiarios de un caso. A diferencia de las
    * escuchas, esto es una lectura puntual: la usa el arranque en frío, que
    * necesita los datos ANTES de poder pintar nada.
