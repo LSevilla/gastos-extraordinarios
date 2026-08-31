@@ -2,6 +2,43 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.5.0-alpha.8] — Porcentajes en NaN al sincronizar
+
+### Corregido
+
+El documento del estado de cuenta mostraba **`$NaN` y `(NaN%)`** en el
+reparto, y el saldo salía en cero teniendo $166.909 netos.
+
+La causa fue una decisión equivocada del build anterior: la estructura del
+caso se escribía **tal cual llegaba de Firestore**. Pero los formatos no
+coinciden — IndexedDB guarda los porcentajes en centésimas
+(`percentageAHundredths`) y Firestore los envía como porcentaje
+(`percentageA`). El campo esperado no existía, quedaba `NaN`, y todo el
+reparto se rompía en silencio.
+
+- **Cada tipo de estructura declara ahora su traducción explícita**
+  (`STRUCTURE_TRANSLATORS`). "Escribir tal cual llega" solo es válido cuando
+  ambos lados usan el mismo formato, y aquí no era así.
+- **Un tramo con porcentajes ilegibles no se escribe.** Guardar un `NaN`
+  rompe el reparto sin avisar; es preferible no aplicarlo y que la pantalla
+  diga que faltan porcentajes.
+- **El documento nunca imprime `$NaN`**: dice "no disponible". Es un
+  documento que se comparte con la otra parte, y una cifra corrupta ahí
+  genera desconfianza.
+
+### Agregado
+
+- **6 pruebas nuevas**: traducción de cada tipo de estructura, rechazo de
+  datos ilegibles, y dos de ida y vuelta que verifican que los nombres de
+  campo entre subida y lectura coincidan —la clase de error que produjo esto.
+
+Total: **579** pruebas.
+
+### Nota
+
+Los tramos ya guardados con el formato incorrecto se corrigen solos: la
+escucha remota los reenvía y ahora se traducen bien.
+
 ## [0.5.0-alpha.7] — La estructura del caso no llegaba a los dispositivos ya instalados
 
 ### Corregido

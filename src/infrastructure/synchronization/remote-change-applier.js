@@ -63,13 +63,57 @@ const STORE_FOR_TYPE = Object.freeze({
 
 /**
  * Entidades de ESTRUCTURA del caso. No llevan `updatedAt`, así que la
- * comparación por marcas de tiempo no aplica: se escriben tal cual llegan.
+ * comparación por marcas de tiempo no aplica: se aplican siempre.
  *
- * Es seguro porque no compiten con edición local simultánea del mismo campo
- * como sí ocurre con un gasto — y porque el coste de no aplicarlas es peor:
- * sin ellas, los gastos del otro dispositivo no se pueden repartir.
+ * TRADUCEN de formato. El intento anterior las escribía tal cual llegaban de
+ * Firestore, y eso produjo `NaN` en los porcentajes: IndexedDB los guarda en
+ * centésimas (`percentageAHundredths`) y Firestore los envía como porcentaje
+ * (`percentageA`). El campo esperado no existía y el reparto salía roto.
+ *
+ * La lección: "escribir tal cual llega" solo es válido cuando ambos lados
+ * usan exactamente el mismo formato, y aquí no era así. Cada tipo declara su
+ * traducción explícita.
  */
-const STRUCTURE_TYPES = Object.freeze(['participant', 'beneficiary', 'percentagePeriod']);
+const STRUCTURE_TRANSLATORS = Object.freeze({
+  participant: (remote, id) => ({
+    id,
+    caseId: String(remote.caseId),
+    firstName: remote.firstName ?? '',
+    lastName: remote.lastName ?? '',
+    rut: remote.rut ?? null,
+    email: remote.email ?? null,
+    phone: remote.phone ?? null,
+    label: remote.label ?? null,
+    isActive: remote.isActive !== false,
+    createdAt: remote.createdAt ?? new Date().toISOString(),
+    updatedAt: remote.updatedAt ?? new Date().toISOString(),
+  }),
+  beneficiary: (remote, id) => ({
+    id,
+    caseId: String(remote.caseId),
+    firstName: remote.firstName ?? '',
+    lastName: remote.lastName ?? '',
+    birthDate: remote.birthDate ?? null,
+    notes: remote.notes ?? '',
+    isActive: remote.isActive !== false,
+    createdAt: remote.createdAt ?? new Date().toISOString(),
+    updatedAt: remote.updatedAt ?? new Date().toISOString(),
+  }),
+  percentagePeriod: (remote, id) => ({
+    id,
+    caseId: String(remote.caseId),
+    participantAId: String(remote.participantAId),
+    participantBId: String(remote.participantBId),
+    // Firestore envía porcentaje; IndexedDB guarda centésimas.
+    percentageAHundredths: Math.round(Number(remote.percentageA) * 100),
+    percentageBHundredths: Math.round(Number(remote.percentageB) * 100),
+    validFrom: remote.validFrom ?? new Date().toISOString(),
+    validTo: remote.validTo ?? null,
+    isCurrent: remote.isCurrent !== false,
+  }),
+});
+
+const STRUCTURE_TYPES = Object.freeze(Object.keys(STRUCTURE_TRANSLATORS));
 
 export class RemoteChangeApplier {
   /**
@@ -103,8 +147,20 @@ export class RemoteChangeApplier {
     );
 
     if (STRUCTURE_TYPES.includes(entityType)) {
+      const record = STRUCTURE_TRANSLATORS[entityType](remoteData, entityId);
+      // Un dato ilegible es peor que ninguno: escribirlo dejaría porcentajes
+      // NaN que rompen el reparto en silencio. Mejor no aplicarlo y que la
+      // pantalla avise de que faltan porcentajes.
+      if (entityType === 'percentagePeriod') {
+        if (
+          !Number.isFinite(record.percentageAHundredths) ||
+          !Number.isFinite(record.percentageBHundredths)
+        ) {
+          return { decision: DECISION.NOOP, entityType, entityId };
+        }
+      }
       await runInTransaction(this.deps.db, [storeName], 'readwrite', (tx) =>
-        promisifyRequest(tx.objectStore(storeName).put({ ...remoteData, id: entityId })),
+        promisifyRequest(tx.objectStore(storeName).put(record)),
       );
       return { decision: DECISION.APPLY, entityType, entityId };
     }

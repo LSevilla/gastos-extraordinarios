@@ -228,7 +228,10 @@ test('un tramo de porcentajes remoto se aplica siempre: sin él los gastos no se
     promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-1')),
   );
   assert.ok(stored, 'el tramo debe quedar disponible en este dispositivo');
-  assert.equal(stored.percentageA, 60);
+  // Firestore envía porcentaje; IndexedDB guarda centésimas. Escribirlo tal
+  // cual llegaba producía NaN en el reparto.
+  assert.equal(stored.percentageAHundredths, 6000);
+  assert.equal(stored.percentageBHundredths, 4000);
 });
 
 test('participantes y beneficiarios remotos también se aplican', async () => {
@@ -250,13 +253,60 @@ test('participantes y beneficiarios remotos también se aplican', async () => {
 
 test('la estructura remota se actualiza aunque ya exista localmente', async () => {
   const { db, applier } = await buildContext();
-  await applier.apply('percentagePeriod', 'tramo-1', { caseId: 'caso-1', percentageA: 50 });
+  await applier.apply('percentagePeriod', 'tramo-1', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 50,
+    percentageB: 50,
+  });
 
   // Los porcentajes se corrigieron en el otro dispositivo.
-  await applier.apply('percentagePeriod', 'tramo-1', { caseId: 'caso-1', percentageA: 70 });
+  await applier.apply('percentagePeriod', 'tramo-1', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 70,
+    percentageB: 30,
+  });
 
   const stored = await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', (tx) =>
     promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-1')),
   );
-  assert.equal(stored.percentageA, 70, 'la corrección debe llegar');
+  assert.equal(stored.percentageAHundredths, 7000, 'la corrección debe llegar');
+});
+
+test('un tramo con porcentajes ilegibles NO se escribe: sería peor que no tenerlo', async () => {
+  const { db, applier } = await buildContext();
+
+  const result = await applier.apply('percentagePeriod', 'tramo-malo', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 'sesenta',
+    percentageB: null,
+  });
+
+  assert.equal(result.decision, DECISION.NOOP);
+  const stored = await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-malo')),
+  );
+  assert.equal(stored, undefined, 'un NaN guardado rompería el reparto en silencio');
+});
+
+test('un participante remoto se traduce al formato local completo', async () => {
+  const { db, applier } = await buildContext();
+
+  await applier.apply('participant', 'p-1', {
+    caseId: 'caso-1',
+    firstName: 'Ana',
+    lastName: 'Rojas',
+  });
+
+  const stored = await runInTransaction(db, [STORE_NAMES.PARTICIPANTS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PARTICIPANTS).get('p-1')),
+  );
+  assert.equal(stored.firstName, 'Ana');
+  assert.equal(stored.isActive, true, 'sin el campo, debe asumirse activo');
+  assert.ok(stored.createdAt, 'los campos que la lectura espera no pueden faltar');
 });

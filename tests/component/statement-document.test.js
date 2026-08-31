@@ -199,3 +199,18 @@ test('reservar y escribir están separados, para poder llenar la ventana despué
   // Escribir en una ventana que la persona cerró mientras esperaba no puede lanzar.
   assert.match(source, /win\.closed/);
 });
+
+test('un monto corrupto no se imprime como "$NaN" en un documento compartido', () => {
+  const html = buildStatementDocumentHtml(
+    baseData({ shareA: amount(NaN), balanceAmount: amount(NaN) }),
+  );
+
+  assert.doesNotMatch(html, /\$NaN/, 'decir "$NaN" a la otra parte genera desconfianza');
+  assert.match(html, /no disponible/);
+});
+
+test('porcentajes ilegibles no se muestran como "(NaN%)"', () => {
+  const html = buildStatementDocumentHtml(baseData({ percentageA: NaN, percentageB: NaN }));
+
+  assert.doesNotMatch(html, /NaN%/);
+});

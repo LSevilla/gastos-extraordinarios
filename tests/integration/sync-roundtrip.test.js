@@ -67,3 +67,39 @@ test('las listas se leen con valor por defecto: un campo ausente no puede tumbar
     );
   }
 });
+
+test('lo que se sube de un tramo puede volver a leerse: los nombres de campo coinciden', async () => {
+  const source = await readFile('src/infrastructure/synchronization/sync-engine.js', 'utf-8');
+  const applier = await readFile(
+    'src/infrastructure/synchronization/remote-change-applier.js',
+    'utf-8',
+  );
+
+  // El defecto real: la subida enviaba `percentageA` (porcentaje) y la
+  // lectura local esperaba `percentageAHundredths` (centésimas). Nadie
+  // traducía, y el reparto salía NaN.
+  const pushed = pushedFields(source, '#pushPercentagePeriodToFirestore');
+  assert.ok(pushed, 'debe existir la subida de tramos');
+  assert.ok(pushed.has('percentageA') && pushed.has('percentageB'));
+
+  assert.match(
+    applier,
+    /percentageAHundredths:\s*Math\.round\(Number\(remote\.percentageA\)\s*\*\s*100\)/,
+    'el aplicador debe traducir de porcentaje a centésimas, no copiar el campo',
+  );
+});
+
+test('la estructura remota se traduce, nunca se escribe tal cual', async () => {
+  const applier = await readFile(
+    'src/infrastructure/synchronization/remote-change-applier.js',
+    'utf-8',
+  );
+
+  assert.match(applier, /STRUCTURE_TRANSLATORS/, 'cada tipo debe declarar su traducción');
+  // Copiar el objeto remoto entero era exactamente lo que producía NaN.
+  assert.doesNotMatch(
+    applier,
+    /put\(\{\s*\.\.\.remoteData,\s*id: entityId\s*\}\)/,
+    'no debe escribirse el documento remoto sin traducir',
+  );
+});

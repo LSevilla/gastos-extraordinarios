@@ -30,8 +30,15 @@ function esc(value) {
     .replaceAll("'", '&#39;');
 }
 
-/** @param {number} amount */
+/**
+ * @param {number} amount
+ * @returns {string}
+ */
 function money(amount) {
+  // Un dato corrupto no debe imprimirse como "$NaN" en un documento que se
+  // comparte con la otra parte: se dice que no está disponible, que es la
+  // verdad y no genera desconfianza.
+  if (!Number.isFinite(amount)) return 'no disponible';
   const sign = amount < 0 ? '−' : '';
   return `${sign}$${Math.abs(amount).toLocaleString('es-CL')}`;
 }
@@ -96,11 +103,12 @@ export function buildStatementDocumentHtml(data) {
            <strong>${esc(data.creditorName ?? '—')}</strong>
          </div>`;
 
-  const splitRows =
-    data.percentageA !== null
-      ? `<div class="info-row"><span>${esc(data.participantAName)} (${data.percentageA}%)</span><span>${money(data.shareA.getAmount())}</span></div>
+  const hasUsablePercentages =
+    Number.isFinite(data.percentageA) && Number.isFinite(data.percentageB);
+  const splitRows = hasUsablePercentages
+    ? `<div class="info-row"><span>${esc(data.participantAName)} (${data.percentageA}%)</span><span>${money(data.shareA.getAmount())}</span></div>
          <div class="info-row"><span>${esc(data.participantBName)} (${data.percentageB}%)</span><span>${money(data.shareB.getAmount())}</span></div>`
-      : `<div class="info-row"><span>${esc(data.participantAName)}</span><span>${money(data.shareA.getAmount())}</span></div>
+    : `<div class="info-row"><span>${esc(data.participantAName)}</span><span>${money(data.shareA.getAmount())}</span></div>
          <div class="info-row"><span>${esc(data.participantBName)}</span><span>${money(data.shareB.getAmount())}</span></div>`;
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
