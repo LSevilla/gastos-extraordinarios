@@ -8,7 +8,7 @@ import { ACTIONS } from '../../src/presentation/views/home-view.js';
 // directa a la lista de gastos — se llegaba de rebote desde "Adjuntar un
 // comprobante", cuyo nombre no anuncia esa función. Va primera porque
 // consultar es la operación más frecuente.
-test('existen exactamente las 7 acciones definidas, en el orden definido', () => {
+test('existen exactamente las 8 acciones definidas, en el orden definido', () => {
   assert.deepEqual(
     ACTIONS.map((a) => a.label),
     [
@@ -18,6 +18,7 @@ test('existen exactamente las 7 acciones definidas, en el orden definido', () =>
       'Registrar un pago',
       'Ver estado de cuenta',
       'Adjuntar un comprobante',
+      'Importar y exportar',
       'Administrar el caso',
     ],
   );
@@ -28,6 +29,7 @@ test('todas las acciones del menú están habilitadas: el sistema quedó complet
   assert.deepEqual(
     enabled.sort(),
     [
+      'dataTransfer',
       'document',
       'expense',
       'expensesList',

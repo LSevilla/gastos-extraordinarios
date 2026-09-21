@@ -52,6 +52,13 @@ export const ACTIONS = [
     enabled: true,
   },
   {
+    id: 'dataTransfer',
+    label: 'Importar y exportar',
+    icon: 'dataTransfer',
+    help: 'Carga gastos desde una planilla de Excel o descarga tus datos.',
+    enabled: true,
+  },
+  {
     id: 'manageCase',
     label: 'Administrar el caso',
     icon: 'manageCase',

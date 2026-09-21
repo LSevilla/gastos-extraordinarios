@@ -33,6 +33,9 @@ export const icons = {
   beneficiaries: wrap(
     '<circle cx="9" cy="8" r="3.2"/><path d="M3.2 19.5c0-3.2 2.6-5.8 5.8-5.8s5.8 2.6 5.8 5.8"/><circle cx="17.6" cy="10.5" r="2.2"/><path d="M17.6 15c2.4 0 3.9 1.8 3.9 4.5"/>',
   ),
+  dataTransfer: wrap(
+    '<path d="M12 3.5v9"/><path d="M8.5 9.2 12 12.7l3.5-3.5"/><path d="M4 15v3.5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V15"/>',
+  ),
   info: wrap('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
   chevronLeft: wrap('<path d="M15 6l-6 6 6 6"/>'),
   chevronRight: wrap('<path d="M9 6l6 6-6 6"/>'),

@@ -41,6 +41,9 @@ import { SyncingPercentagePeriodRepository } from './infrastructure/synchronizat
 import { IndexedDbPaymentRepository } from './infrastructure/indexeddb/repositories/indexeddb-payment-repository.js';
 import { PaymentService } from './application/services/payment-service.js';
 import { renderPayments } from './presentation/views/payments-view.js';
+import { renderDataTransfer } from './presentation/views/data-transfer-view.js';
+import { ExpenseImportService } from './application/services/expense-import-service.js';
+import { DataExportService } from './application/services/data-export-service.js';
 import { SyncCoordinator } from './infrastructure/synchronization/sync-coordinator.js';
 import { RemoteChangeApplier } from './infrastructure/synchronization/remote-change-applier.js';
 import { IndexedDbSyncStateRepository } from './infrastructure/indexeddb/repositories/indexeddb-sync-state-repository.js';
@@ -397,6 +400,26 @@ async function main() {
     runAtomicWrite,
   });
 
+  const expenseImportService = new ExpenseImportService({
+    expenseService,
+    beneficiaryRepo,
+    participantRepo,
+    expenseRepo,
+    membershipRepo: caseMembershipRepo,
+    clock,
+  });
+
+  const dataExportService = new DataExportService({
+    expenseRepo,
+    reimbursementRepo,
+    settlementRepo,
+    paymentRepo,
+    beneficiaryRepo,
+    participantRepo,
+    percentagePeriodRepo,
+    membershipRepo: caseMembershipRepo,
+  });
+
   const authProvider = await withBootTimeout(
     createFirebaseAuthProvider(firebaseConfig),
     20000,
@@ -551,6 +574,18 @@ async function main() {
         onProfileUpdated: () => {},
         onBack: () => navigate('home'),
       });
+    } else if (view === 'dataTransfer') {
+      await renderDataTransfer(root, {
+        importService: expenseImportService,
+        exportService: dataExportService,
+        caseEntity: summary.caseEntity,
+        beneficiaries,
+        participants: summary.participants,
+        currentParticipantId,
+        actorUserId: currentUserProfile.id,
+        canWrite: canWriteExpenses,
+        onBack: () => navigate('home'),
+      });
     } else if (view === 'payments') {
       await renderPayments(root, {
         paymentService,
@@ -620,6 +655,7 @@ async function main() {
           else if (actionId === 'expensesList') navigate('expensesList');
           else if (actionId === 'statement') navigate('accountStatement');
           else if (actionId === 'payment') navigate('payments');
+          else if (actionId === 'dataTransfer') navigate('dataTransfer');
           else if (actionId === 'expense') {
             if (canWriteExpenses) navigate('registerExpense');
             else showToast('No tienes permiso para registrar gastos en este caso.');

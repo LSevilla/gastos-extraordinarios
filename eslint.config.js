@@ -89,6 +89,8 @@ export default [
         // URL: necesario para createObjectURL/revokeObjectURL en el visor
         // de comprobantes, que muestra archivos guardados en IndexedDB.
         URL: 'readonly',
+        // Blob: descarga de archivos exportados.
+        Blob: 'readonly',
         TextEncoder: 'readonly',
       },
     },
@@ -122,6 +124,8 @@ export default [
       globals: {
         process: 'readonly',
         URL: 'readonly',
+        // Blob: descarga de archivos exportados.
+        Blob: 'readonly',
         console: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',

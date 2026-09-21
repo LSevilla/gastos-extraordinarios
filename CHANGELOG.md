@@ -2,6 +2,54 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.6.0-alpha.1] — Importar y exportar datos
+
+Nueva acción en el menú principal. Permite cargar gastos masivamente desde
+una planilla y sacar los datos del caso.
+
+### Por qué CSV y no .xlsx
+
+Leer un archivo de Excel binario exigiría una librería de cientos de
+kilobytes cargada desde internet. Esta aplicación funciona sin conexión por
+diseño y no lleva bundler. Excel guarda como CSV desde "Guardar como", y el
+resultado es un archivo legible que se puede inspeccionar y corregir a mano.
+
+### Agregado
+
+- **Importación de gastos en dos pasos.** Primero se analiza el archivo y se
+  muestra exactamente qué va a pasar; solo después se confirma. Importar
+  cincuenta gastos mal es peor que no importar ninguno: deshacerlo significa
+  anularlos uno por uno, y mientras tanto las cifras del caso están falseadas.
+- **Plantilla descargable** con los nombres reales del caso en la fila de
+  ejemplo, para que no haya que adivinar el formato de la fecha ni del monto
+  —los dos campos donde más se falla.
+- **Exportación**: gastos y movimientos (reembolsos y pagos) como CSV que se
+  abren directamente en Excel, y un **respaldo completo** en JSON con los
+  identificadores. El respaldo declara en su interior que no incluye los
+  comprobantes adjuntos, para que nadie crea tener algo que no tiene.
+- **`shared/csv.js`**, sin dependencias, que resuelve las trampas reales del
+  CSV en Chile: Excel en español usa punto y coma, escribe BOM al guardar
+  como UTF-8, el punto separa miles y la coma decimales, y las fechas van con
+  el día primero.
+- **33 pruebas nuevas.** Total: **612**.
+
+### Decisiones
+
+- **Los nombres se comparan sin acentos ni mayúsculas.** Exigir coincidencia
+  exacta convertiría la importación en un ejercicio de transcripción.
+- **Un beneficiario que no existe rechaza la fila, no lo crea.** Dar de alta
+  un hijo por un error de tipeo sería peor que rechazar la línea.
+- **Los posibles repetidos se separan, no se rechazan ni se duplican.** Misma
+  fecha, mismo beneficiario y mismo monto puede ser una planilla subida dos
+  veces o dos gastos reales iguales; decide la persona.
+- **$150.000 se lee como ciento cincuenta mil, no como 150.** Es el error más
+  grave posible al importar dinero y el más fácil de cometer aplicando la
+  convención inglesa.
+- **El número de fila del informe coincide con el de Excel**, contando la
+  cabecera como fila 1.
+- **Si una fila falla al guardarse, las demás se conservan** y se informa cuál
+  falló. Abortar todo obligaría a repetir el trabajo entero por una línea.
+
 ## [0.5.0-alpha.8] — Porcentajes en NaN al sincronizar
 
 ### Corregido
