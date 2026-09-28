@@ -10,6 +10,7 @@ function toRecord(settings) {
     id: settings.id,
     activeCaseId: settings.activeCaseId ? settings.activeCaseId.toString() : null,
     onboardingCompleted: settings.onboardingCompleted,
+    userId: settings.userId ?? null,
     initialUploadDoneForCaseId: settings.initialUploadDoneForCaseId ?? null,
     updatedAt: settings.updatedAt.toISOString(),
   };
@@ -21,6 +22,7 @@ function fromRecord(record) {
     record.activeCaseId ? Identifier.from(record.activeCaseId).getValue() : null,
     record.onboardingCompleted,
     new Date(record.updatedAt),
+    record.userId ?? null,
   );
   // Marca de la subida inicial: no es parámetro del constructor porque es un
   // detalle de sincronización, no del ajuste en sí. Ausente = no hecha.

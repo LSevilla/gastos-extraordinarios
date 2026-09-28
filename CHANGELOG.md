@@ -2,6 +2,56 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.6.0-alpha.2] — Aislamiento de datos entre cuentas
+
+Corrección de seguridad. Tiene prioridad sobre cualquier otra cosa pendiente.
+
+### El fallo
+
+Al entrar con el correo y la contraseña de otra cuenta en un navegador donde
+ya se había usado la aplicación, se mostraba el caso de la cuenta anterior:
+nombre del caso, beneficiarios, gastos y montos. Peor todavía, en ese mismo
+arranque se le concedía a la persona recién autenticada una membresía de
+**propietario** sobre ese caso ajeno, que quedaba escrita en la nube.
+
+La causa: el puntero al "caso activo" es un registro único del dispositivo
+(`appSettings`, id fijo `local`) y no guardaba de quién era. El arranque lo
+usaba tal cual, sin compararlo con quien acababa de autenticarse. La
+consulta a la nube que sí filtra por usuario existía, pero solo se ejecutaba
+cuando el dispositivo estaba vacío — nunca en el segundo inicio de sesión.
+
+### Corregido
+
+- **El caso activo ahora tiene dueño.** `AppSettings` guarda el `userId` de
+  la cuenta a la que pertenece, y `belongsTo()` exige constancia expresa: un
+  puntero sin marca devuelve `false`. "No sé de quién es" nunca se trata como
+  "es tuyo".
+- **El arranque verifica antes de mostrar.** Si el caso guardado es de otra
+  cuenta, se descarta y se buscan en la nube los datos de quien entró. Hay un
+  segundo cerrojo justo antes de sincronizar y navegar.
+- **Sin conexión no se enseña nada ajeno.** Si no se puede consultar la nube,
+  aparece "No hay datos de tu cuenta en este dispositivo" con reintentar y
+  cerrar sesión, en vez del caso del dueño anterior.
+- **Se acabó la apropiación del caso.** `bootstrapOwnerMembership()` ya solo
+  se llama al crear el caso. Concedérsela a un caso preexistente era lo que
+  convertía "ver datos ajenos" en "ser dueño de datos ajenos".
+- **Punteros antiguos.** Un registro escrito por una versión anterior no
+  lleva marca; se acepta solo si la membresía local lo confirma, y en ese
+  momento se sella para que la comprobación funcione después sin conexión.
+- Cerrar sesión olvida el perfil en memoria.
+
+### Pendiente asociado
+
+Las membresías de propietario que este fallo ya creó en Firestore **no las
+borra un cambio de código**: hay que eliminarlas a mano en la consola.
+Mientras existan, la cuenta afectada sigue teniendo acceso legítimo al caso
+ajeno según las reglas del servidor.
+
+También queda pendiente separar la cola de sincronización por usuario: las
+operaciones sin enviar de la cuenta anterior siguen en la cola del aparato.
+Ya no pueden filtrar datos —las reglas del servidor las rechazan sin
+membresía—, pero generan reintentos fallidos.
+
 ## [0.6.0-alpha.1] — Importar y exportar datos
 
 Nueva acción en el menú principal. Permite cargar gastos masivamente desde

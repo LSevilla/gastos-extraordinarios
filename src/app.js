@@ -17,6 +17,7 @@ import { IndexedDbParticipantRepository } from './infrastructure/indexeddb/repos
 import { IndexedDbPercentagePeriodRepository } from './infrastructure/indexeddb/repositories/indexeddb-percentage-period-repository.js';
 import { IndexedDbBeneficiaryRepository } from './infrastructure/indexeddb/repositories/indexeddb-beneficiary-repository.js';
 import { IndexedDbAppSettingsRepository } from './infrastructure/indexeddb/repositories/indexeddb-app-settings-repository.js';
+import { AppSettings } from './domain/configuration/app-settings.js';
 import { IndexedDbExpenseRepository } from './infrastructure/indexeddb/repositories/indexeddb-expense-repository.js';
 import { IndexedDbDocumentRepository } from './infrastructure/indexeddb/repositories/indexeddb-document-repository.js';
 import { IndexedDbUserProfileRepository } from './infrastructure/indexeddb/repositories/indexeddb-user-profile-repository.js';
@@ -689,10 +690,20 @@ async function main() {
           // pasa por el decorador automáticamente) — se encola su
           // sincronización explícitamente acá, una sola vez.
           await syncEngine.enqueueCaseSync(summary.caseEntity.id);
+          // Este es el ÚNICO lugar donde se crea la membresía owner: quien
+          // acaba de crear el caso es su dueño. En cualquier otro punto,
+          // concedérsela equivaldría a apropiarse de un caso ajeno.
           await membershipService.bootstrapOwnerMembership(
             summary.caseEntity.id.toString(),
             currentUserProfile.id,
           );
+          // Y se marca el puntero local con su dueño, para que otra cuenta
+          // que entre en este mismo navegador no herede este caso.
+          const created = await appSettingsRepo.get();
+          if (created) {
+            created.assignToUser(currentUserProfile.id, clock);
+            await appSettingsRepo.save(created);
+          }
         }
         navigate('home');
       },
@@ -716,6 +727,46 @@ async function main() {
     }
     let settings = await appSettingsRepo.get();
 
+    // NADIE ve un caso que no es suyo.
+    //
+    // El puntero al caso activo vive en este dispositivo, no en la cuenta.
+    // Hasta aquí se usaba tal cual: si dos personas entraban en el mismo
+    // navegador, la segunda abría el caso de la primera —con sus gastos,
+    // sus hijos y sus montos— y además se le concedía membresía sobre él.
+    // Por eso ahora el puntero se verifica contra quien acaba de
+    // autenticarse ANTES de tocar nada.
+    const ownership = await resolveActiveCaseOwnership(settings, currentUserProfile.id);
+
+    if (ownership === 'foreign') {
+      // El caso guardado es de otra cuenta. Se ignora por completo y se
+      // buscan en la nube los datos de quien sí está autenticado.
+      const recovery = await recoverFromCloud(currentUserProfile.id);
+      if (recovery.recovered) {
+        settings = await appSettingsRepo.get();
+      } else if (recovery.reason === 'no-memberships') {
+        // La nube respondió y esta cuenta no tiene ningún caso: es alguien
+        // nuevo usando un aparato prestado. Se descarta el puntero ajeno y
+        // se le ofrece crear el suyo.
+        settings = AppSettings.empty(clock);
+        settings.assignToUser(currentUserProfile.id, clock);
+        await appSettingsRepo.save(settings);
+        startOnboarding();
+        return;
+      } else {
+        // No se pudo preguntar a la nube. Sin conexión no hay forma de
+        // traer sus datos, y mostrar los del dueño anterior no es una
+        // opción. Se dice la verdad y se para.
+        showNoDataForThisAccount();
+        return;
+      }
+    } else if (ownership === 'mine-unstamped') {
+      // Puntero escrito por una versión anterior, sin marca de dueño, pero
+      // la membresía confirma que es de esta persona: se sella para que la
+      // próxima vez la comprobación sea inmediata y funcione sin conexión.
+      settings.assignToUser(currentUserProfile.id, clock);
+      await appSettingsRepo.save(settings);
+    }
+
     // Si este dispositivo no tiene nada, puede ser una cuenta realmente
     // nueva o el mismo usuario en otro aparato. Antes de ofrecerle crear un
     // caso desde cero se comprueba en la nube: sus datos pueden estar ahí.
@@ -725,29 +776,30 @@ async function main() {
       // inesperado aquí dejaría a la persona mirando "Ingresando…" para
       // siempre. Ante cualquier problema se sigue con el flujo normal,
       // que como mucho ofrece crear un caso — molesto, pero recuperable.
-      try {
-        const recovery = await deviceBootstrapService.recoverCasesForUser(currentUserProfile.id);
-        if (recovery.isSuccess() && recovery.getValue().recovered) {
-          settings = await appSettingsRepo.get();
-        }
-      } catch (error) {
-        console.warn('[arranque] No se pudieron recuperar los casos desde la nube:', error);
+      if ((await recoverFromCloud(currentUserProfile.id)).recovered) {
+        settings = await appSettingsRepo.get();
       }
     }
 
     if (settings && settings.onboardingCompleted) {
-      // El caso local pudo haberse creado antes de que existiera el
-      // concepto de membresía (o en este mismo dispositivo) — se asegura
-      // idempotentemente que quien está autenticado tenga membresía owner.
       const summaryResult = await caseService.getActiveCaseSummary();
       const summary = summaryResult.getValue();
       if (summary) {
-        await membershipService.bootstrapOwnerMembership(
-          summary.caseEntity.id.toString(),
-          currentUserProfile.id,
-        );
+        // Segundo cerrojo, por si el puntero cambió entre la comprobación
+        // de arriba y esta lectura: se vuelve a exigir que el caso sea de
+        // esta cuenta antes de mostrarlo o de sincronizarlo.
+        const freshSettings = await appSettingsRepo.get();
+        if (!freshSettings || !freshSettings.belongsTo(currentUserProfile.id)) {
+          showNoDataForThisAccount();
+          return;
+        }
         // Aquí arranca la sincronización real: envía lo pendiente y queda
         // escuchando los cambios del otro dispositivo.
+        //
+        // Ya NO se llama a bootstrapOwnerMembership(): concederse a sí
+        // mismo la propiedad de un caso preexistente era justamente lo que
+        // convertía "ver datos ajenos" en "ser dueño de datos ajenos". La
+        // membresía owner se crea solo al crear el caso (startOnboarding).
         await initialUploadService.uploadExistingCaseMembers(summary.caseEntity.id);
         await syncCoordinator.start(summary.caseEntity.id);
       }
@@ -755,6 +807,74 @@ async function main() {
     } else {
       startOnboarding();
     }
+  }
+
+  /**
+   * ¿El caso activo guardado en este dispositivo es de quien acaba de entrar?
+   *
+   * @param {import('./domain/configuration/app-settings.js').AppSettings|null} settings
+   * @param {string} userId
+   * @returns {Promise<'none'|'mine'|'mine-unstamped'|'foreign'>}
+   */
+  async function resolveActiveCaseOwnership(settings, userId) {
+    if (!settings || !settings.onboardingCompleted || !settings.activeCaseId) return 'none';
+    if (settings.belongsTo(userId)) return 'mine';
+    if (settings.userId !== null) return 'foreign';
+
+    // Puntero sin marca: lo escribió una versión anterior. La membresía
+    // local decide. Se exige que exista Y esté activa; en la duda, ajeno.
+    try {
+      const membership = await caseMembershipRepo.findByCaseAndUser(
+        settings.activeCaseId.toString(),
+        userId,
+      );
+      const active =
+        membership && (typeof membership.isActive !== 'function' || membership.isActive());
+      return active ? 'mine-unstamped' : 'foreign';
+    } catch (error) {
+      console.warn('[arranque] No se pudo verificar la pertenencia del caso local:', error);
+      return 'foreign';
+    }
+  }
+
+  /**
+   * Trae de la nube los casos de esta cuenta. Nunca lanza: un fallo aquí
+   * está en el camino crítico del arranque y dejaría la pantalla colgada.
+   *
+   * @param {string} userId
+   * @returns {Promise<{recovered: boolean, reason: string}>} `reason` distingue
+   *   "la nube dice que no tienes casos" (no-memberships → crear uno es
+   *   correcto) de "no pude preguntar" (nunca mostrar datos ajenos).
+   */
+  async function recoverFromCloud(userId) {
+    try {
+      const recovery = await deviceBootstrapService.recoverCasesForUser(userId);
+      if (!recovery.isSuccess()) return { recovered: false, reason: 'failed' };
+      const value = recovery.getValue();
+      return { recovered: Boolean(value.recovered), reason: value.reason ?? 'failed' };
+    } catch (error) {
+      console.warn('[arranque] No se pudieron recuperar los casos desde la nube:', error);
+      return { recovered: false, reason: 'failed' };
+    }
+  }
+
+  function showNoDataForThisAccount() {
+    root.innerHTML = `
+      <div class="container">
+        <div class="card stack">
+          <h1 class="page-title">No hay datos de tu cuenta en este dispositivo</h1>
+          <p class="body-text">Este aparato guarda el caso de otra cuenta y no vamos a mostrártelo. Conéctate a internet y reintenta para descargar tu propia información.</p>
+          <button type="button" class="btn btn-primary btn-block" id="retry-account-data">Reintentar</button>
+          <button type="button" class="btn btn-secondary btn-block" id="signout-no-data">Cerrar sesión</button>
+        </div>
+      </div>
+    `;
+    root.querySelector('#retry-account-data').addEventListener('click', () => {
+      window.location.reload();
+    });
+    root.querySelector('#signout-no-data').addEventListener('click', () => {
+      handleSignOut();
+    });
   }
 
   /** @returns {{id: string, token: string}|null} */
@@ -770,6 +890,7 @@ async function main() {
     // Detener antes de cerrar sesión: dejar escuchas activas sobre datos de
     // una cuenta que ya no está autenticada provoca errores de permisos.
     await syncCoordinator.stop();
+    currentUserProfile = null;
     await authService.signOut();
     // renderLogin real llega vía el observador de sesión (onAuthStateChanged),
     // que se dispara automáticamente tras signOut() — no se navega a mano.

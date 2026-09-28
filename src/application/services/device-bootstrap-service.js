@@ -158,6 +158,10 @@ export class DeviceBootstrapService {
       new AppSettings(null, false, this.deps.clock.utcNow());
     settings.activeCaseId = caseId;
     settings.onboardingCompleted = true;
+    // Se deja constancia de QUIÉN es el dueño del puntero. Sin esta marca el
+    // caso activo era del aparato y no de la cuenta, y la siguiente persona
+    // que entrara en el mismo navegador veía datos ajenos.
+    settings.userId = userId;
     settings.updatedAt = this.deps.clock.utcNow();
     await this.deps.appSettingsRepo.save(settings);
 
