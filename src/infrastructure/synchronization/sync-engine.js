@@ -48,6 +48,32 @@ export class SyncEngine {
   constructor(deps) {
     this.deps = deps;
     this.unsubscribers = [];
+    // Lo pone el coordinador al arrancar. Sirve para avisar de que acaba de
+    // entrar trabajo en la cola y conviene vaciarla pronto.
+    this.onEnqueued = null;
+  }
+
+  /**
+   * Guarda una operación pendiente y avisa de que hay trabajo.
+   *
+   * El aviso importa: la cola se vaciaba al arrancar, al recuperar la
+   * conexión, al volver a la pestaña y cada 5 minutos, pero NO al guardar.
+   * En esa ventana, cualquier cambio que llegara del otro dispositivo
+   * pisaba el cambio local antes de que este llegara a subirse, y la
+   * edición desaparecía sin ningún aviso.
+   *
+   * @param {import('../../domain/synchronization/operation-queue-entry.js').OperationQueueEntry} entry
+   */
+  async #enqueue(entry) {
+    await this.deps.operationQueueRepo.save(entry);
+    if (typeof this.onEnqueued !== 'function') return;
+    try {
+      this.onEnqueued();
+    } catch (error) {
+      // Avisar es una mejora, no una garantía: si el aviso falla, el dato
+      // ya está guardado y la cola se vaciará en el próximo disparo.
+      console.warn('[sync] No se pudo avisar de la nueva operación en cola:', error);
+    }
   }
 
   /**
@@ -63,7 +89,7 @@ export class SyncEngine {
       { caseId: caseId.toString() },
       this.deps.clock,
     );
-    await this.deps.operationQueueRepo.save(entry);
+    await this.#enqueue(entry);
   }
 
   /**
@@ -80,7 +106,7 @@ export class SyncEngine {
       { expenseId: expenseId.toString() },
       this.deps.clock,
     );
-    await this.deps.operationQueueRepo.save(entry);
+    await this.#enqueue(entry);
   }
 
   /**
@@ -98,7 +124,7 @@ export class SyncEngine {
       { reimbursementId: reimbursementId.toString() },
       this.deps.clock,
     );
-    await this.deps.operationQueueRepo.save(entry);
+    await this.#enqueue(entry);
   }
 
   /**
@@ -111,14 +137,14 @@ export class SyncEngine {
       { settlementId: settlementId.toString() },
       this.deps.clock,
     );
-    await this.deps.operationQueueRepo.save(entry);
+    await this.#enqueue(entry);
   }
 
   /**
    * @param {Identifier} participantId
    */
   async enqueueParticipantSync(participantId) {
-    await this.deps.operationQueueRepo.save(
+    await this.#enqueue(
       OperationQueueEntry.create(
         'sync:participant',
         { participantId: participantId.toString() },
@@ -131,7 +157,7 @@ export class SyncEngine {
    * @param {Identifier} beneficiaryId
    */
   async enqueueBeneficiarySync(beneficiaryId) {
-    await this.deps.operationQueueRepo.save(
+    await this.#enqueue(
       OperationQueueEntry.create(
         'sync:beneficiary',
         { beneficiaryId: beneficiaryId.toString() },
@@ -144,7 +170,7 @@ export class SyncEngine {
    * @param {Identifier} paymentId
    */
   async enqueuePaymentSync(paymentId) {
-    await this.deps.operationQueueRepo.save(
+    await this.#enqueue(
       OperationQueueEntry.create(
         'sync:payment',
         { paymentId: paymentId.toString() },
@@ -157,7 +183,7 @@ export class SyncEngine {
    * @param {Identifier} periodId
    */
   async enqueuePercentagePeriodSync(periodId) {
-    await this.deps.operationQueueRepo.save(
+    await this.#enqueue(
       OperationQueueEntry.create(
         'sync:percentagePeriod',
         { periodId: periodId.toString() },
@@ -298,10 +324,20 @@ export class SyncEngine {
   async #pushCaseToFirestore(caseEntity) {
     const { firestore, firestoreModule: fs } = this.deps;
     const ref = fs.doc(firestore, CASES_COLLECTION, caseEntity.id.toString());
+    // Se suben TODOS los campos del caso. Faltaban participantIds,
+    // beneficiaryIds, onboardingCompleted y createdAt: cuando ese documento
+    // recortado volvía al otro dispositivo se escribía tal cual sobre el
+    // registro local, y al leerlo reventaba en `participantIds.map` — con
+    // el caso ilegible, TODAS las pantallas mostraban "No se pudo abrir
+    // esta pantalla".
     await fs.setDoc(ref, {
       name: caseEntity.name,
       description: caseEntity.description,
       operationMode: caseEntity.operationMode,
+      participantIds: caseEntity.participantIds.map((id) => id.toString()),
+      beneficiaryIds: caseEntity.beneficiaryIds.map((id) => id.toString()),
+      onboardingCompleted: Boolean(caseEntity.onboardingCompleted),
+      createdAt: caseEntity.createdAt.toISOString(),
       updatedAt: caseEntity.updatedAt.toISOString(),
     });
   }

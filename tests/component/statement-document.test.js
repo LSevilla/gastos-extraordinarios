@@ -214,3 +214,43 @@ test('porcentajes ilegibles no se muestran como "(NaN%)"', () => {
 
   assert.doesNotMatch(html, /NaN%/);
 });
+
+test('cada línea muestra su detalle, y las que no tienen lo dicen', () => {
+  const conDetalle = buildLine();
+  conDetalle.expense.notes = 'Pabellón quirúrgico extracción';
+  const sinDetalle = buildLine({ amountValue: 50000 });
+
+  const html = buildStatementDocumentHtml(baseData({ lines: [conDetalle, sinDetalle] }));
+
+  assert.match(html, /<th>Detalle<\/th>/);
+  assert.match(html, /Pabellón quirúrgico extracción/);
+  // Sin esto, dos gastos del mismo día, mismo hijo y misma categoría son
+  // indistinguibles en el documento que se le entrega a la otra parte.
+  assert.match(html, /Sin detalle/);
+});
+
+test('el detalle se escapa: un gasto no puede inyectar HTML en el documento', () => {
+  const line = buildLine();
+  line.expense.notes = '<script>alert(1)</script>';
+
+  const html = buildStatementDocumentHtml(baseData({ lines: [line] }));
+
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /&lt;script&gt;/);
+});
+
+test('las líneas salen en orden cronológico aunque lleguen desordenadas', () => {
+  const tarde = buildLine();
+  tarde.expense.date = new Date('2026-08-20');
+  tarde.expense.notes = 'La segunda';
+  const temprano = buildLine();
+  temprano.expense.date = new Date('2026-08-03');
+  temprano.expense.notes = 'La primera';
+
+  const html = buildStatementDocumentHtml(baseData({ lines: [tarde, temprano] }));
+
+  assert.ok(
+    html.indexOf('La primera') < html.indexOf('La segunda'),
+    'El estado de cuenta se revisa contra boletas ordenadas por fecha.',
+  );
+});

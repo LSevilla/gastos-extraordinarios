@@ -112,6 +112,18 @@ button:focus-visible,
   gap: var(--space-1);
 }
 
+/* Errores que no corresponden a un campo concreto (por ejemplo, que la suma
+   de los porcentajes no dé 100). Se muestran arriba del formulario: antes
+   se descartaban y el botón parecía no hacer nada. */
+.form-error-summary {
+  font-size: var(--font-size-auxiliar);
+  color: var(--color-error);
+  background: var(--color-error-suave, #fef2f2);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radio-borde, 8px);
+  padding: var(--space-2) var(--space-3);
+}
+
 .field-hint {
   font-size: var(--font-size-auxiliar);
   color: var(--color-texto-secundario);

@@ -62,8 +62,16 @@ const STORE_FOR_TYPE = Object.freeze({
 });
 
 /**
- * Entidades de ESTRUCTURA del caso. No llevan `updatedAt`, así que la
- * comparación por marcas de tiempo no aplica: se aplican siempre.
+ * Entidades de ESTRUCTURA del caso.
+ *
+ * Se aplicaban SIEMPRE, sin mirar fechas. Eso hacía que una edición local
+ * recién guardada y todavía sin subir fuera pisada por el documento viejo
+ * que devolvía cualquier snapshot del otro dispositivo: el cambio
+ * desaparecía de la pantalla sin aviso. Ahora participantes y
+ * beneficiarios —que sí llevan `updatedAt` en los dos lados— pasan por la
+ * misma comparación que el resto. Los tramos de porcentajes no tienen
+ * marca de tiempo y siguen aplicándose, con una salvaguarda: un tramo ya
+ * cerrado en local no vuelve a abrirse.
  *
  * TRADUCEN de formato. El intento anterior las escribía tal cual llegaban de
  * Firestore, y eso produjo `NaN` en los porcentajes: IndexedDB los guarda en
@@ -148,17 +156,32 @@ export class RemoteChangeApplier {
 
     if (STRUCTURE_TYPES.includes(entityType)) {
       const record = STRUCTURE_TRANSLATORS[entityType](remoteData, entityId);
-      // Un dato ilegible es peor que ninguno: escribirlo dejaría porcentajes
-      // NaN que rompen el reparto en silencio. Mejor no aplicarlo y que la
-      // pantalla avise de que faltan porcentajes.
+
       if (entityType === 'percentagePeriod') {
+        // Un dato ilegible es peor que ninguno: escribirlo dejaría
+        // porcentajes NaN que rompen el reparto en silencio.
         if (
           !Number.isFinite(record.percentageAHundredths) ||
           !Number.isFinite(record.percentageBHundredths)
         ) {
           return { decision: DECISION.NOOP, entityType, entityId };
         }
+        // Un tramo cerrado no se reabre. El otro dispositivo puede no
+        // haberse enterado todavía del cierre y lo enviaría como vigente;
+        // aplicarlo dejaría dos tramos vigentes a la vez y el reparto
+        // pasaría a depender de cuál se leyera primero.
+        if (localRecord && localRecord.validTo && !record.validTo) {
+          return { decision: DECISION.NOOP, entityType, entityId };
+        }
+      } else if (localRecord?.updatedAt && record.updatedAt) {
+        // Lo local más nuevo gana: es una edición que todavía no se ha
+        // subido. Pisarla con el documento viejo del servidor es
+        // exactamente la pérdida silenciosa que esto evita.
+        if (new Date(localRecord.updatedAt).getTime() > new Date(record.updatedAt).getTime()) {
+          return { decision: DECISION.IGNORE, entityType, entityId };
+        }
       }
+
       await runInTransaction(this.deps.db, [storeName], 'readwrite', (tx) =>
         promisifyRequest(tx.objectStore(storeName).put(record)),
       );
@@ -179,7 +202,11 @@ export class RemoteChangeApplier {
     });
 
     if (decision === DECISION.APPLY) {
-      const record = { ...remoteData, id: entityId };
+      // Se fusiona sobre lo local en vez de reemplazarlo. Un documento
+      // remoto al que le falte un campo —porque lo escribió una versión
+      // anterior— dejaría el registro local incompleto e ilegible; así, lo
+      // que el remoto no trae se conserva.
+      const record = { ...(localRecord ?? {}), ...remoteData, id: entityId };
       // El registro y su marca de sincronización se escriben en la MISMA
       // transacción: si se separaran, un corte entre ambas dejaría el dato
       // aplicado sin memoria, y el próximo cambio ajeno aparecería como un

@@ -525,7 +525,10 @@ async function main() {
     );
 
     if (view === 'manageCase') {
-      renderManageCase(root, {
+      // Con `await`: sin él, un fallo al leer los datos escapaba del
+      // try/catch de navigate() y dejaba la pantalla en blanco en vez de
+      // mostrar el aviso de error.
+      await renderManageCase(root, {
         caseService,
         beneficiaryService,
         caseEntity: summary.caseEntity,

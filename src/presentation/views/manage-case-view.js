@@ -19,11 +19,31 @@ import { createBreadcrumb } from '../components/breadcrumb.js';
  *   onBack: () => void,
  * }} deps
  */
-export function renderManageCase(root, deps) {
-  render();
+export async function renderManageCase(root, deps) {
+  // Estado propio de la pantalla. NO se usan directamente los objetos que
+  // llegan en `deps`: son una foto del momento en que se abrió la vista, y
+  // después de guardar quedan viejos. Al volver a dibujar con ellos, los
+  // campos mostraban el valor anterior y parecía que el cambio no se había
+  // guardado —cuando sí estaba en la base de datos—.
+  let caseEntity = deps.caseEntity;
+  let participants = deps.participants;
+  let percentagePeriod = deps.percentagePeriod;
+
+  await render();
+
+  /** Relee del almacenamiento lo que esta pantalla muestra. */
+  async function refreshState() {
+    const summaryResult = await deps.caseService.getActiveCaseSummary();
+    const summary = summaryResult.isSuccess() ? summaryResult.getValue() : null;
+    if (!summary) return;
+    caseEntity = summary.caseEntity;
+    participants = summary.participants;
+    percentagePeriod = summary.percentagePeriod;
+  }
 
   async function render() {
-    const beneficiariesResult = await deps.beneficiaryService.listBeneficiaries(deps.caseEntity.id);
+    await refreshState();
+    const beneficiariesResult = await deps.beneficiaryService.listBeneficiaries(caseEntity.id);
     const beneficiaries = beneficiariesResult.getValue();
 
     root.innerHTML = '';
@@ -55,7 +75,7 @@ export function renderManageCase(root, deps) {
       <form class="stack" novalidate>
         <div class="field">
           <label for="mc-case-name">Nombre del caso</label>
-          <input id="mc-case-name" data-field="name" type="text" value="${escapeAttr(deps.caseEntity.name)}" />
+          <input id="mc-case-name" data-field="name" type="text" value="${escapeAttr(caseEntity.name)}" />
         </div>
         <button type="submit" class="btn btn-primary">Guardar nombre</button>
       </form>
@@ -64,14 +84,16 @@ export function renderManageCase(root, deps) {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const name = form.querySelector('#mc-case-name').value;
-      const result = await deps.caseService.updateCase(deps.caseEntity.id, { name });
+      const result = await deps.caseService.updateCase(caseEntity.id, { name });
       if (result.isFailure()) {
         applyFieldErrors(form, result.getError());
         return;
       }
       clearFieldErrors(form);
-      deps.caseEntity.name = name.trim();
       showToast('Cambios guardados.');
+      // Se vuelve a dibujar desde lo guardado, no desde lo escrito: así lo
+      // que queda en pantalla es exactamente lo que hay en la base.
+      await render();
     });
     return card;
   }
@@ -87,7 +109,7 @@ export function renderManageCase(root, deps) {
     title.textContent = 'Participantes';
     card.append(eyebrow, title);
 
-    deps.participants.forEach((participant) => {
+    participants.forEach((participant) => {
       const form = document.createElement('form');
       form.className = 'stack';
       form.noValidate = true;
@@ -134,14 +156,8 @@ export function renderManageCase(root, deps) {
           return;
         }
         clearFieldErrors(form);
-        Object.assign(participant, {
-          firstName: changes.firstName.trim(),
-          lastName: changes.lastName.trim(),
-          rut: changes.rut.trim(),
-          email: changes.email.trim(),
-          phone: changes.phone.trim(),
-        });
         showToast('Cambios guardados.');
+        await render();
       });
       card.appendChild(form);
     });
@@ -151,8 +167,8 @@ export function renderManageCase(root, deps) {
   function renderPercentagesCard() {
     const card = document.createElement('div');
     card.className = 'card stack';
-    const [a, b] = deps.participants;
-    const current = deps.percentagePeriod;
+    const [a, b] = participants;
+    const current = percentagePeriod;
     card.innerHTML = `
       <p class="section-eyebrow">Porcentajes</p>
       <h2 class="section-title">Distribución de gastos</h2>
@@ -195,7 +211,7 @@ export function renderManageCase(root, deps) {
         return;
       }
       clearFieldErrors(form);
-      const result = await deps.caseService.createPercentageTramo(deps.caseEntity.id, a.id, b.id, {
+      const result = await deps.caseService.createPercentageTramo(caseEntity.id, a.id, b.id, {
         percentageA,
         percentageB,
       });
@@ -204,7 +220,7 @@ export function renderManageCase(root, deps) {
         return;
       }
       showToast('Distribución actualizada.');
-      render();
+      await render();
     });
     return card;
   }

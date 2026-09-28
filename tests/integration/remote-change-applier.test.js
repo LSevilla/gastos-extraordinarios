@@ -310,3 +310,102 @@ test('un participante remoto se traduce al formato local completo', async () => 
   assert.equal(stored.isActive, true, 'sin el campo, debe asumirse activo');
   assert.ok(stored.createdAt, 'los campos que la lectura espera no pueden faltar');
 });
+
+/**
+ * Reporte real: cambios hechos en "Administrar el caso" desaparecían solos
+ * al rato. La estructura del caso se aplicaba SIEMPRE, sin mirar fechas,
+ * así que cualquier snapshot del otro dispositivo devolvía el documento
+ * anterior y pisaba la edición local que todavía no se había subido.
+ */
+
+test('una edición local más nueva NO la pisa el participante remoto viejo', async () => {
+  const { db, applier } = await buildContext();
+  await runInTransaction(db, [STORE_NAMES.PARTICIPANTS], 'readwrite', (tx) =>
+    promisifyRequest(
+      tx.objectStore(STORE_NAMES.PARTICIPANTS).put({
+        id: 'p-1',
+        caseId: 'caso-1',
+        firstName: 'Juan Carlos',
+        lastName: 'Caprile',
+        updatedAt: '2026-09-28T18:00:00.000Z',
+      }),
+    ),
+  );
+
+  const result = await applier.apply('participant', 'p-1', {
+    caseId: 'caso-1',
+    firstName: 'Juan',
+    lastName: 'Caprile',
+    updatedAt: '2026-09-28T17:00:00.000Z',
+  });
+
+  assert.equal(result.decision, DECISION.IGNORE);
+  const stored = await runInTransaction(db, [STORE_NAMES.PARTICIPANTS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PARTICIPANTS).get('p-1')),
+  );
+  assert.equal(stored.firstName, 'Juan Carlos', 'la edición local no puede perderse');
+});
+
+test('un beneficiario remoto más nuevo sí se aplica', async () => {
+  const { db, applier } = await buildContext();
+  await runInTransaction(db, [STORE_NAMES.BENEFICIARIES], 'readwrite', (tx) =>
+    promisifyRequest(
+      tx.objectStore(STORE_NAMES.BENEFICIARIES).put({
+        id: 'b-1',
+        caseId: 'caso-1',
+        firstName: 'Isa',
+        updatedAt: '2026-09-28T10:00:00.000Z',
+      }),
+    ),
+  );
+
+  const result = await applier.apply('beneficiary', 'b-1', {
+    caseId: 'caso-1',
+    firstName: 'Isabella',
+    updatedAt: '2026-09-28T11:00:00.000Z',
+  });
+
+  assert.equal(result.decision, DECISION.APPLY);
+  const stored = await runInTransaction(db, [STORE_NAMES.BENEFICIARIES], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.BENEFICIARIES).get('b-1')),
+  );
+  assert.equal(stored.firstName, 'Isabella');
+});
+
+test('un tramo cerrado en local no vuelve a abrirse porque el remoto lo crea vigente', async () => {
+  const { db, applier } = await buildContext();
+  await applier.apply('percentagePeriod', 'tramo-1', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 70,
+    percentageB: 30,
+    validFrom: '2026-01-01T00:00:00.000Z',
+    validTo: null,
+  });
+  // El tramo se cierra en este dispositivo al crear uno nuevo.
+  await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readwrite', async (tx) => {
+    const store = tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS);
+    const actual = await promisifyRequest(store.get('tramo-1'));
+    actual.validTo = '2026-09-28T12:00:00.000Z';
+    actual.isCurrent = false;
+    await promisifyRequest(store.put(actual));
+  });
+
+  // El otro dispositivo, que aún no se enteró, lo reenvía como vigente.
+  const result = await applier.apply('percentagePeriod', 'tramo-1', {
+    caseId: 'caso-1',
+    participantAId: 'p1',
+    participantBId: 'p2',
+    percentageA: 70,
+    percentageB: 30,
+    validFrom: '2026-01-01T00:00:00.000Z',
+    validTo: null,
+  });
+
+  assert.equal(result.decision, DECISION.NOOP);
+  const stored = await runInTransaction(db, [STORE_NAMES.PERCENTAGE_PERIODS], 'readonly', (tx) =>
+    promisifyRequest(tx.objectStore(STORE_NAMES.PERCENTAGE_PERIODS).get('tramo-1')),
+  );
+  assert.equal(stored.isCurrent, false, 'dos tramos vigentes hacen el reparto impredecible');
+});

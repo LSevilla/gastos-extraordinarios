@@ -11,9 +11,17 @@
  */
 export function applyFieldErrors(form, validationResult) {
   clearFieldErrors(form);
+  // Errores que no tienen un campo donde colgarse. Antes se descartaban en
+  // silencio: "Los porcentajes deben sumar 100%" apunta a `percentageTotal`,
+  // que no es ningún input, así que al guardar 60/30 no pasaba
+  // absolutamente nada — ni mensaje, ni cambio. El botón parecía roto.
+  const huerfanos = [];
   for (const error of validationResult.getErrors()) {
     const field = form.querySelector(`[data-field="${error.field}"]`);
-    if (!field) continue;
+    if (!field) {
+      huerfanos.push(error.message);
+      continue;
+    }
     const wrapper = field.closest('.field') ?? field.parentElement;
     wrapper.classList.add('has-error');
     const input = wrapper.querySelector('input, select, textarea');
@@ -32,12 +40,21 @@ export function applyFieldErrors(form, validationResult) {
       input.setAttribute('aria-describedby', errorId);
     }
   }
+
+  if (huerfanos.length > 0) {
+    const aviso = document.createElement('p');
+    aviso.className = 'form-error-summary';
+    aviso.setAttribute('role', 'alert');
+    aviso.textContent = huerfanos.join(' ');
+    form.prepend(aviso);
+  }
 }
 
 /**
  * @param {HTMLElement} form
  */
 export function clearFieldErrors(form) {
+  form.querySelectorAll('.form-error-summary').forEach((el) => el.remove());
   form.querySelectorAll('.field.has-error').forEach((wrapper) => {
     wrapper.classList.remove('has-error');
     const errorEl = wrapper.querySelector('.field-error');

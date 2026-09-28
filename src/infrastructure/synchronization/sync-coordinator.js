@@ -18,6 +18,13 @@
 
 const PERIODIC_INTERVAL_MS = 5 * 60 * 1000;
 
+// Espera tras un cambio local antes de subirlo. No es cero a propósito:
+// editar un participante dispara varios guardados seguidos y subirlos de
+// uno en uno gastaría batería y datos sin ganancia. Pero tampoco puede ser
+// largo: mientras el cambio no esté arriba, una actualización del otro
+// dispositivo puede pisarlo.
+const FLUSH_DEBOUNCE_MS = 1500;
+
 /** @typedef {'synced'|'pending'|'offline'|'syncError'} SyncStatus */
 
 export class SyncCoordinator {
@@ -37,6 +44,20 @@ export class SyncCoordinator {
     this.disposers = [];
     this.inFlight = false;
     this.currentCaseId = null;
+    this.flushTimerId = null;
+  }
+
+  /**
+   * Programa el vaciado de la cola poco después de un cambio local.
+   * Llamadas seguidas reinician la espera: se sube una vez, al final.
+   */
+  scheduleFlush() {
+    if (!this.started) return;
+    if (this.flushTimerId) clearTimeout(this.flushTimerId);
+    this.flushTimerId = setTimeout(() => {
+      this.flushTimerId = null;
+      this.syncNow('local-change');
+    }, FLUSH_DEBOUNCE_MS);
   }
 
   /**
@@ -46,6 +67,8 @@ export class SyncCoordinator {
     if (this.started) await this.stop();
     this.started = true;
     this.currentCaseId = caseId;
+    // Cada cambio guardado en local pide su subida cuanto antes.
+    this.deps.syncEngine.onEnqueued = () => this.scheduleFlush();
 
     // Escuchas de cambios remotos. Cada una entrega al aplicador, que decide
     // si escribir, ignorar o marcar conflicto.
@@ -91,8 +114,11 @@ export class SyncCoordinator {
   async stop() {
     this.started = false;
     this.currentCaseId = null;
+    this.deps.syncEngine.onEnqueued = null;
     if (this.timerId) clearInterval(this.timerId);
     this.timerId = null;
+    if (this.flushTimerId) clearTimeout(this.flushTimerId);
+    this.flushTimerId = null;
     this.disposers.forEach((dispose) => {
       try {
         dispose();

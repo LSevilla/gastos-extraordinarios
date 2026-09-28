@@ -2,6 +2,105 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.6.0-alpha.5] — Los cambios locales dejan de perderse
+
+Cierra el pendiente de alpha.4. Un cambio guardado podía desaparecer solo
+pasado un rato, sin ningún aviso.
+
+### El fallo
+
+Dos piezas se combinaban mal:
+
+1. La cola de envío a la nube se vaciaba al arrancar, al recuperar la
+   conexión, al volver a la pestaña y cada 5 minutos, pero **no al
+   guardar**. Un cambio podía quedar hasta cinco minutos solo en local.
+2. Participantes, beneficiarios y tramos de porcentajes se aplicaban
+   **siempre** que llegaran del servidor, sin comparar fechas. El código
+   daba por hecho que no tenían marca de tiempo; participantes y
+   beneficiarios sí la tienen.
+
+Durante esa ventana, cualquier actualización del otro dispositivo devolvía
+el documento anterior y pisaba la edición local antes de que llegara a
+subirse. En el peor caso —recargar justo después de editar— el valor viejo
+se escribía encima y después se subía a la nube: pérdida definitiva.
+
+### Corregido
+
+- **Se sube al guardar.** Cada cambio local pide su envío, agrupado con
+  1,5 segundos de espera para no subir de uno en uno los varios guardados
+  que produce un mismo formulario.
+- **Lo local más nuevo gana.** Participantes y beneficiarios pasan por la
+  misma comparación de fechas que los gastos: un documento remoto más
+  antiguo que la edición local se ignora en vez de pisarla.
+- **Un tramo cerrado no se reabre.** El otro dispositivo puede no haberse
+  enterado del cierre y reenviarlo como vigente; aplicarlo dejaba dos
+  tramos vigentes a la vez y el reparto pasaba a depender de cuál se
+  leyera primero.
+- Al cerrar la sincronización se desengancha el aviso y se cancela el
+  envío en espera.
+
+## [0.6.0-alpha.4] — Administrar el caso guarda y lo demuestra
+
+Los cambios hechos en "Administrar el caso" sí se guardaban, pero la
+pantalla no los mostraba: parecía que no habían quedado.
+
+### Corregido
+
+- **La pantalla se redibujaba con datos viejos.** Recibía el caso, los
+  participantes y el tramo de porcentajes al abrirse y los seguía usando
+  después de guardar. Lo más visible era la distribución de gastos: guardar
+  70/30 creaba el tramo nuevo correctamente y acto seguido los campos
+  volvían al reparto anterior delante de la persona. Ahora cada redibujo
+  relee lo almacenado, así que lo que se ve en pantalla es lo que hay en la
+  base de datos.
+- **Errores que no se mostraban.** "Los porcentajes deben sumar 100%" no
+  apunta a ningún campo del formulario, y los mensajes sin campo se
+  descartaban en silencio: guardar 60/30 no hacía absolutamente nada, sin
+  aviso. Ahora esos mensajes aparecen arriba del formulario. Afecta a todas
+  las pantallas, no solo a esta.
+- **El caso se subía incompleto a la nube.** Faltaban `participantIds`,
+  `beneficiaryIds`, `onboardingCompleted` y `createdAt`. Cuando ese
+  documento recortado volvía al otro dispositivo se escribía tal cual sobre
+  el registro local y el caso quedaba ilegible: a partir de ahí, todas las
+  pantallas mostraban "No se pudo abrir esta pantalla".
+- **Lo remoto ahora se fusiona sobre lo local** en vez de reemplazarlo
+  entero, para que un documento al que le falte un campo no vuelva a dejar
+  un registro incompleto.
+- `renderManageCase` se espera con `await`. Sin él, un fallo al leer los
+  datos escapaba del manejo de errores y dejaba la pantalla en blanco.
+
+### Pendiente asociado (resuelto en 0.6.0-alpha.5)
+
+La cola de envío se vacía al arrancar, al recuperar la conexión, al volver
+a la pestaña y cada 5 minutos, pero **no al guardar**. Entre que se guarda
+un cambio de participantes, beneficiarios o porcentajes y que se sube,
+cualquier actualización que llegue del otro dispositivo lo pisa sin avisar,
+porque esas tres entidades se aplican siempre, sin comparar fechas. Es la
+causa probable de un cambio que se revierte solo pasado un rato.
+
+## [0.6.0-alpha.3] — Detalle en el estado de cuenta
+
+### Agregado
+
+- **Columna "Detalle"** en la tabla de gastos del estado de cuenta. Sin ella,
+  tres gastos del mismo día, el mismo hijo y el mismo tipo eran tres líneas
+  idénticas: quien recibe el documento no podía saber a qué correspondía
+  cada monto ni contrastarlo con su boleta. Los gastos sin detalle lo dicen
+  ("Sin detalle") en vez de dejar la celda en blanco.
+
+### Cambiado
+
+- **Las líneas salen en orden cronológico.** Antes se imprimían en el orden
+  en que estaban guardadas. Un estado de cuenta se revisa contra boletas y
+  cartolas, que vienen por fecha.
+- La tabla pasa a ancho de columna fijo. Con ocho columnas, el navegador le
+  daba todo el espacio a los nombres largos y partía las fechas y las cifras
+  en dos líneas —un "−$432.886" cortado se lee como dos números—. Ahora la
+  fecha y los montos nunca se parten.
+- La cabecera "Categoría" se llama **"Tipo"**: no cabía en su columna y se
+  montaba sobre "Detalle". Es además el nombre que la aplicación le da a ese
+  campo desde el UX Patch 1.2.
+
 ## [0.6.0-alpha.2] — Aislamiento de datos entre cuentas
 
 Corrección de seguridad. Tiene prioridad sobre cualquier otra cosa pendiente.

@@ -78,14 +78,23 @@ export function buildStatementDocumentHtml(data) {
   const isDefinitive = data.kind === 'definitivo';
   const generatedAt = new Date();
 
-  const rows = data.lines
+  // Orden cronológico. Un estado de cuenta se revisa contra boletas y
+  // cartolas, que vienen por fecha; una lista desordenada obliga a buscar
+  // cada línea a ojo y es donde se cuelan los reclamos.
+  const orderedLines = [...data.lines].sort(
+    (a, b) => new Date(a.expense.date).getTime() - new Date(b.expense.date).getTime(),
+  );
+
+  const rows = orderedLines
     .map((line) => {
       const { expense, net } = line;
+      const detail = String(expense.notes ?? '').trim();
       return `
         <tr>
           <td>${esc(shortDate(expense.date))}</td>
           <td><strong>${esc(data.beneficiaryNameFor(expense))}</strong>${line.isRetroactive ? ' <span class="tag">retroactivo</span>' : ''}</td>
           <td>${esc(expense.category)}</td>
+          <td class="detail">${detail.length > 0 ? esc(detail) : '<span class="empty">Sin detalle</span>'}</td>
           <td>${esc(data.participantNameFor(expense.paidByParticipantId))}</td>
           <td class="num">${money(net.originalAmount.getAmount())}</td>
           <td class="num">${net.reimbursedAmount.getAmount() > 0 ? `−${money(net.reimbursedAmount.getAmount())}` : '—'}</td>
@@ -138,12 +147,29 @@ export function buildStatementDocumentHtml(data) {
   .info-row.total{border-top:1px solid #d7dde5;margin-top:6px;padding-top:6px;font-weight:700}
   .balance{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 14px;margin-bottom:16px;font-size:11pt;text-align:center;color:#1e3a8a}
   .balance-even{background:#ecfdf5;border-color:#a7f3d0;color:#065f46;font-weight:600}
-  table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:8.5pt}
-  thead th{background:#1e5aa8;color:#fff;padding:7px 8px;text-align:left;font-size:7.5pt;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+  /* Ancho fijo por columna: con el detalle son ocho, y sin repartirlas a
+     mano el navegador le da todo el espacio a los nombres largos y deja el
+     detalle en una tira de una palabra por línea. */
+  table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:7.5pt;table-layout:fixed}
+  thead th:nth-child(1),tbody td:nth-child(1){width:9%}
+  thead th:nth-child(2),tbody td:nth-child(2){width:14%}
+  thead th:nth-child(3),tbody td:nth-child(3){width:8%}
+  thead th:nth-child(4),tbody td:nth-child(4){width:23%}
+  thead th:nth-child(5),tbody td:nth-child(5){width:17%}
+  thead th:nth-child(6),tbody td:nth-child(6){width:9.5%}
+  thead th:nth-child(7),tbody td:nth-child(7){width:9.5%}
+  thead th:nth-child(8),tbody td:nth-child(8){width:10%}
+  /* La fecha y las cifras nunca se parten: un "−$432.886" cortado en dos
+     líneas se lee como dos números distintos. Los nombres sí pueden. */
+  tbody td:nth-child(1),tbody td.num{white-space:nowrap}
+  tbody td{overflow-wrap:break-word}
+  td.detail{color:#475467}
+  td.detail .empty{color:#98a2b3;font-style:italic}
+  thead th{background:#1e5aa8;color:#fff;padding:6px 6px;text-align:left;font-size:6.8pt;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
   thead th.num,tbody td.num{text-align:right}
   tbody tr{border-bottom:1px solid #eaeef3}
   tbody tr:nth-child(even){background:#fafbfc}
-  tbody td{padding:6px 8px;vertical-align:top}
+  tbody td{padding:5px 6px;vertical-align:top}
   .tag{display:inline-block;background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:7pt;font-weight:600}
   .empty{padding:20px;text-align:center;color:#667085;font-style:italic;background:#fafbfc;border-radius:6px;margin-bottom:14px}
   .footer{font-size:7.5pt;color:#98a2b3;border-top:1px solid #eaeef3;padding-top:8px;margin-top:16px;display:flex;justify-content:space-between;gap:12px}
@@ -216,7 +242,7 @@ ${
     ? '<div class="empty">No hay gastos pendientes de liquidar en este período.</div>'
     : `<table>
          <thead><tr>
-           <th>Fecha</th><th>Beneficiario</th><th>Categoría</th><th>Pagado por</th>
+           <th>Fecha</th><th>Beneficiario</th><th>Tipo</th><th>Detalle</th><th>Pagado por</th>
            <th class="num">Monto</th><th class="num">Reembolso</th><th class="num">Neto</th>
          </tr></thead>
          <tbody>${rows}</tbody>
