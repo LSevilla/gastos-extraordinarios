@@ -373,6 +373,11 @@ export class SyncEngine {
       // Build 1.7: la marca de liquidación viaja con el gasto; si no, el
       // otro participante podría volver a liquidar lo ya liquidado.
       settlementId: expense.settlementId ? expense.settlementId.toString() : null,
+      // Si no viajaran, restablecer un gasto en un dispositivo lo dejaría
+      // anulado en el otro: el campo que manda es deletedAt, pero el
+      // rastro de quién lo devolvió a la cuenta se perdería.
+      restoredAt: expense.restoredAt ? expense.restoredAt.toISOString() : null,
+      restoredByUserId: expense.restoredByUserId ?? null,
     });
   }
 

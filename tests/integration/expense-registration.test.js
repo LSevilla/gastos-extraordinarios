@@ -188,3 +188,37 @@ test('listExpensesByCase() ordena por fecha descendente', async () => {
   assert.equal(expenses.length, 2);
   assert.ok(expenses[0].date.getTime() > expenses[1].date.getTime());
 });
+
+test('un gasto restablecido vuelve a contar entre los gastos activos del caso', async () => {
+  const { ctx, caseId, participants, beneficiaries, actorUserId } = await setup();
+  const creado = await ctx.expenseService.createExpense({
+    caseId,
+    createdByUserId: actorUserId,
+    beneficiaryId: beneficiaries[0].id,
+    category: 'Salud',
+    date: new Date('2026-01-05'),
+    amountValue: 50000,
+    paidByParticipantId: participants[0].id,
+    expectedReimbursement: false,
+    documentChoice: 'declareNone',
+    file: null,
+  });
+  const expenseId = Identifier.from(creado.getValue().expenseId).getValue();
+
+  await ctx.expenseService.cancelExpense(expenseId, 'me equivoqué de hijo', actorUserId);
+  const anulado = (await ctx.expenseService.listExpensesByCase(caseId, actorUserId)).getValue();
+  assert.equal(
+    anulado.some((e) => e.id.equals(expenseId)),
+    false,
+    'anulado no debe aparecer entre los activos',
+  );
+
+  await ctx.expenseService.restoreExpense(expenseId, actorUserId);
+
+  const activos = (await ctx.expenseService.listExpensesByCase(caseId, actorUserId)).getValue();
+  assert.equal(
+    activos.some((e) => e.id.equals(expenseId)),
+    true,
+    'restablecido tiene que volver a los totales y al estado de cuenta',
+  );
+});

@@ -103,3 +103,33 @@ test('la estructura remota se traduce, nunca se escribe tal cual', async () => {
     'no debe escribirse el documento remoto sin traducir',
   );
 });
+
+test('la subida de un gasto incluye el rastro de anulación y restablecimiento', async () => {
+  const source = await readFile('src/infrastructure/synchronization/sync-engine.js', 'utf-8');
+  const fields = pushedFields(source, '#pushExpenseToFirestore');
+
+  // deletedAt es lo que decide si el gasto cuenta; sin él, restablecerlo en
+  // un dispositivo lo dejaría anulado en el otro y las dos partes verían
+  // cifras distintas de la misma cuenta.
+  assert.ok(fields.has('deletedAt'));
+  assert.ok(fields.has('cancellationReason'));
+  assert.ok(fields.has('restoredAt'), 'sin restoredAt se pierde quién devolvió el gasto y cuándo');
+  assert.ok(fields.has('restoredByUserId'));
+});
+
+test('lo que se sube de un gasto puede volver a leerse: los campos del restablecimiento coinciden', async () => {
+  const source = await readFile('src/infrastructure/synchronization/sync-engine.js', 'utf-8');
+  const repo = await readFile(
+    'src/infrastructure/indexeddb/repositories/indexeddb-expense-repository.js',
+    'utf-8',
+  );
+  const fields = pushedFields(source, '#pushExpenseToFirestore');
+
+  for (const field of ['restoredAt', 'restoredByUserId']) {
+    assert.ok(fields.has(field));
+    assert.ok(
+      repo.includes(`record.${field}`),
+      `el repositorio debe leer ${field}; si no, el dato llega y se descarta`,
+    );
+  }
+});

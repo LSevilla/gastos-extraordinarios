@@ -304,6 +304,19 @@ export async function renderExpenseDetail(root, deps) {
     card.className = 'card stack';
     card.innerHTML = `<h2 class="section-title">Acciones</h2>`;
 
+    // Un gasto anulado no se puede editar (lo rechaza el dominio), así que
+    // ofrecer "Editar" y "Anular" sobre él sería ofrecer dos botones que no
+    // hacen nada. Lo único que cabe hacer es devolverlo a la cuenta.
+    if (expense.isDeleted()) {
+      const restoreButton = document.createElement('button');
+      restoreButton.type = 'button';
+      restoreButton.className = 'btn btn-primary btn-block';
+      restoreButton.textContent = 'Restablecer gasto';
+      restoreButton.addEventListener('click', openRestoreExpenseModal);
+      card.appendChild(restoreButton);
+      return card;
+    }
+
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.className = 'btn btn-secondary btn-block';
@@ -327,7 +340,8 @@ export async function renderExpenseDetail(root, deps) {
       <h2 class="section-title">Registro</h2>
       <p class="muted-text">Registrado por: ${expense.createdByUserId ? 'Usuario de la cuenta' : 'Autor no registrado'}</p>
       <p class="muted-text">Última modificación: ${expense.updatedByUserId ? 'Usuario de la cuenta' : 'Última modificación no registrada'}</p>
-      ${expense.isDeleted() ? `<p class="muted-text">Motivo de anulación: ${escapeHtml(expense.cancellationReason ?? '')}</p>` : ''}
+      ${expense.cancellationReason ? `<p class="muted-text">Motivo de anulación: ${escapeHtml(expense.cancellationReason)}</p>` : ''}
+      ${expense.wasRestored() ? `<p class="muted-text">Restablecido el ${expense.restoredAt.toLocaleDateString('es-CL')} — vuelve a contar en la cuenta.</p>` : ''}
     `;
     return card;
   }
@@ -608,6 +622,46 @@ export async function renderExpenseDetail(root, deps) {
           }
           handle.close();
           showToast('Gasto anulado.');
+          refresh();
+        });
+        body.appendChild(form);
+      },
+    });
+  }
+
+  function openRestoreExpenseModal() {
+    const liquidado = Boolean(expense.settlementId);
+    openModal({
+      title: 'Restablecer gasto',
+      render: (body, handle) => {
+        const form = document.createElement('form');
+        form.noValidate = true;
+        form.className = 'stack';
+        // Se dice exactamente qué cambia en la plata, que es lo único que
+        // importa aquí, y se advierte del caso del período ya liquidado:
+        // el gasto reaparece, pero en el estado de cuenta siguiente y
+        // marcado como retroactivo, no dentro de la liquidación cerrada.
+        form.innerHTML = `
+          <p class="body-text">El gasto vuelve a contar en los totales y en el estado de cuenta. Queda registrado que estuvo anulado, con su motivo, y quién lo restableció.</p>
+          ${
+            liquidado
+              ? '<p class="body-text">Este gasto pertenece a un período ya liquidado. Restablecerlo no cambia esa liquidación: aparecerá en el próximo estado de cuenta marcado como retroactivo.</p>'
+              : ''
+          }
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-primary">Restablecer gasto</button>
+          </div>
+        `;
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          clearFieldErrors(form);
+          const result = await deps.expenseService.restoreExpense(expense.id, deps.actorUserId);
+          if (result.isFailure()) {
+            applyFieldErrors(form, result.getError());
+            return;
+          }
+          handle.close();
+          showToast('Gasto restablecido.');
           refresh();
         });
         body.appendChild(form);

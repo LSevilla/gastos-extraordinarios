@@ -241,3 +241,75 @@ test('cancel() conserva los documentos adjuntos — no los toca', () => {
   expense.cancel('motivo', 'uid-1', clock);
   assert.equal(expense.documentIds.length, 1, 'La anulación no debe afectar los documentos.');
 });
+
+/**
+ * Restablecer un gasto anulado. La regla de fondo: anular quita plata de
+ * la cuenta del otro, así que el rastro de por qué se quitó no puede
+ * borrarse al devolverla.
+ */
+
+test('restore() deja el gasto activo otra vez', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  expense.cancel('gasto duplicado', 'uid-1', clock);
+
+  const laterClock = Clock.fixed(new Date('2026-03-01T00:00:00.000Z'));
+  const result = expense.restore('uid-2', laterClock);
+
+  assert.equal(result.isSuccess(), true);
+  assert.equal(expense.deletedAt, null);
+  assert.equal(expense.isDeleted(), false);
+  assert.equal(expense.status, 'active');
+});
+
+test('restore() conserva quién anuló y por qué — el rastro no se borra', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  expense.cancel('gasto duplicado', 'uid-1', clock);
+  expense.restore('uid-2', clock);
+
+  assert.equal(expense.cancelledByUserId, 'uid-1');
+  assert.equal(expense.cancellationReason, 'gasto duplicado');
+});
+
+test('restore() registra quién lo restableció y cuándo', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  expense.cancel('motivo', 'uid-1', clock);
+  const laterClock = Clock.fixed(new Date('2026-03-01T00:00:00.000Z'));
+  expense.restore('uid-2', laterClock);
+
+  assert.equal(expense.wasRestored(), true);
+  assert.equal(expense.restoredByUserId, 'uid-2');
+  assert.equal(expense.restoredAt.toISOString(), '2026-03-01T00:00:00.000Z');
+  assert.equal(expense.updatedByUserId, 'uid-2');
+  assert.equal(expense.updatedAt.toISOString(), '2026-03-01T00:00:00.000Z');
+});
+
+test('restore() rechaza un gasto que no está anulado', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  const result = expense.restore('uid-1', clock);
+
+  assert.equal(result.isFailure(), true);
+  assert.equal(result.getError().getErrors()[0].code, 'EXPENSE_NOT_CANCELLED');
+});
+
+test('un gasto restablecido vuelve a poder editarse', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  expense.cancel('motivo', 'uid-1', clock);
+  assert.equal(expense.update({ category: 'Educación' }, 'uid-1', clock).isFailure(), true);
+
+  expense.restore('uid-1', clock);
+
+  assert.equal(expense.update({ category: 'Educación' }, 'uid-1', clock).isSuccess(), true);
+  assert.equal(expense.category, 'Educación');
+});
+
+test('volver a anular limpia la marca de restablecido: el estado actual es anulado', () => {
+  const expense = Expense.create(baseInput(), clock).getValue();
+  expense.cancel('primer motivo', 'uid-1', clock);
+  expense.restore('uid-2', clock);
+  expense.cancel('segundo motivo', 'uid-3', clock);
+
+  assert.equal(expense.isDeleted(), true);
+  assert.equal(expense.wasRestored(), false);
+  assert.equal(expense.restoredAt, null);
+  assert.equal(expense.cancellationReason, 'segundo motivo');
+});

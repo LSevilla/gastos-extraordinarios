@@ -236,3 +236,75 @@ test('un gasto anulado queda excluido de listExpensesByCase() (solo activos)', a
   assert.equal(withCancelled.getValue().length, 1);
   assert.equal(withCancelled.getValue()[0].isDeleted(), true);
 });
+
+test('restoreExpense() devuelve el gasto a la cuenta y lo persiste', async () => {
+  const { membershipRepo, expenseService, expenseRepo } = await buildContext();
+  await membershipRepo.save(
+    membership({ caseId: caseId.toString(), userId: 'owner-1', role: 'owner' }),
+  );
+  const createResult = await expenseService.createExpense(
+    baseExpenseInput({ createdByUserId: 'owner-1' }),
+  );
+  const expenseId = Identifier.from(createResult.getValue().expenseId).getValue();
+  await expenseService.cancelExpense(expenseId, 'me equivoqué', 'owner-1');
+
+  const result = await expenseService.restoreExpense(expenseId, 'owner-1');
+
+  assert.equal(result.isSuccess(), true);
+  const expense = await expenseRepo.findById(expenseId);
+  assert.equal(expense.isDeleted(), false);
+  assert.equal(expense.restoredByUserId, 'owner-1');
+  assert.equal(expense.cancellationReason, 'me equivoqué', 'el rastro de la anulación se conserva');
+});
+
+test('viewer NO puede restablecer un gasto anulado', async () => {
+  const { membershipRepo, expenseService, expenseRepo } = await buildContext();
+  await membershipRepo.save(
+    membership({ caseId: caseId.toString(), userId: 'owner-1', role: 'owner' }),
+  );
+  await membershipRepo.save(
+    membership({ caseId: caseId.toString(), userId: 'viewer-1', role: 'viewer' }),
+  );
+  const createResult = await expenseService.createExpense(
+    baseExpenseInput({ createdByUserId: 'owner-1' }),
+  );
+  const expenseId = Identifier.from(createResult.getValue().expenseId).getValue();
+  await expenseService.cancelExpense(expenseId, 'motivo', 'owner-1');
+
+  const result = await expenseService.restoreExpense(expenseId, 'viewer-1');
+
+  assert.equal(result.isFailure(), true);
+  assert.equal(result.getError().getErrors()[0].code, 'EXPENSE_FORBIDDEN');
+  const expense = await expenseRepo.findById(expenseId);
+  assert.equal(expense.isDeleted(), true, 'sin permiso no se toca nada');
+});
+
+test('restoreExpense() sobre un gasto que no existe falla sin reventar', async () => {
+  const { membershipRepo, expenseService } = await buildContext();
+  await membershipRepo.save(
+    membership({ caseId: caseId.toString(), userId: 'owner-1', role: 'owner' }),
+  );
+
+  const result = await expenseService.restoreExpense(Identifier.generate(), 'owner-1');
+
+  assert.equal(result.isFailure(), true);
+  assert.equal(result.getError().getErrors()[0].code, 'EXPENSE_NOT_FOUND');
+});
+
+test('restoreExpense() sobre un gasto activo falla y no lo altera', async () => {
+  const { membershipRepo, expenseService, expenseRepo } = await buildContext();
+  await membershipRepo.save(
+    membership({ caseId: caseId.toString(), userId: 'owner-1', role: 'owner' }),
+  );
+  const createResult = await expenseService.createExpense(
+    baseExpenseInput({ createdByUserId: 'owner-1' }),
+  );
+  const expenseId = Identifier.from(createResult.getValue().expenseId).getValue();
+
+  const result = await expenseService.restoreExpense(expenseId, 'owner-1');
+
+  assert.equal(result.isFailure(), true);
+  assert.equal(result.getError().getErrors()[0].code, 'EXPENSE_NOT_CANCELLED');
+  const expense = await expenseRepo.findById(expenseId);
+  assert.equal(expense.wasRestored(), false);
+});

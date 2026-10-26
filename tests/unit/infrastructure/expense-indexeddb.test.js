@@ -162,3 +162,36 @@ test('actualizar un gasto existente (save de nuevo) sobrescribe correctamente, s
   assert.equal(all.length, 1, 'No debe duplicarse.');
   assert.equal(all[0].category, 'Educación');
 });
+
+test('el restablecimiento sobrevive a guardar y releer', async () => {
+  const db = await freshDb();
+  const repo = new IndexedDbExpenseRepository(db);
+  const expense = buildExpense();
+  expense.cancel('gasto duplicado', 'uid-1', clock);
+  const laterClock = Clock.fixed(new Date('2026-07-01T00:00:00.000Z'));
+  expense.restore('uid-2', laterClock);
+  await repo.save(expense);
+
+  const leido = await repo.findById(expense.id);
+
+  assert.equal(leido.isDeleted(), false);
+  assert.equal(leido.wasRestored(), true);
+  assert.equal(leido.restoredByUserId, 'uid-2');
+  assert.equal(leido.restoredAt.toISOString(), '2026-07-01T00:00:00.000Z');
+  // El rastro de la anulación tiene que seguir ahí después del viaje.
+  assert.equal(leido.cancelledByUserId, 'uid-1');
+  assert.equal(leido.cancellationReason, 'gasto duplicado');
+});
+
+test('un gasto guardado antes de que existiera esta función se lee como nunca restablecido', async () => {
+  const db = await freshDb();
+  const repo = new IndexedDbExpenseRepository(db);
+  const expense = buildExpense();
+  await repo.save(expense);
+
+  const leido = await repo.findById(expense.id);
+
+  assert.equal(leido.restoredAt, null);
+  assert.equal(leido.restoredByUserId, null);
+  assert.equal(leido.wasRestored(), false);
+});

@@ -46,8 +46,8 @@ export class Expense extends AggregateRoot {
    * @param {Date|null} deletedAt
    * @param {string|null} createdByUserId - uid de Firebase; null para gastos históricos sin este dato
    * @param {string|null} updatedByUserId
-   * @param {string|null} cancelledByUserId - solo se completa cuando deletedAt no es null
-   * @param {string|null} cancellationReason - solo se completa cuando deletedAt no es null
+   * @param {string|null} cancelledByUserId - quién anuló; se conserva aunque el gasto se restablezca
+   * @param {string|null} cancellationReason - por qué se anuló; se conserva aunque el gasto se restablezca
    */
   constructor(
     id,
@@ -96,6 +96,25 @@ export class Expense extends AggregateRoot {
     // persiste aparte; un registro antiguo sin el campo se lee como null,
     // que es exactamente "no liquidado".
     this.settlementId = null;
+
+    // Restablecimiento de un gasto anulado. Igual que settlementId, se
+    // asignan fuera del constructor para no alargar una firma posicional.
+    //
+    // Al restablecer NO se borran `cancelledByUserId` ni
+    // `cancellationReason`: en un caso de pensión de alimentos, que un
+    // gasto estuvo anulado y por qué es parte de lo que las partes pueden
+    // discutir después. Se conserva el rastro completo y se agrega quién
+    // lo devolvió a la cuenta y cuándo.
+    this.restoredAt = null;
+    this.restoredByUserId = null;
+  }
+
+  /**
+   * ¿Este gasto estuvo anulado alguna vez y se devolvió a la cuenta?
+   * @returns {boolean}
+   */
+  wasRestored() {
+    return this.restoredAt !== null;
   }
 
   /** @returns {boolean} */
@@ -399,6 +418,48 @@ export class Expense extends AggregateRoot {
     this.deletedAt = now;
     this.cancelledByUserId = actorUserId;
     this.cancellationReason = trimmedReason;
+    this.restoredAt = null;
+    this.restoredByUserId = null;
+    this.updatedAt = now;
+    this.updatedByUserId = actorUserId;
+    return Result.ok(undefined);
+  }
+
+  /**
+   * Deshace una anulación: el gasto vuelve a contar en los totales y en el
+   * estado de cuenta. Es la contraparte exacta de cancel() — limpia
+   * `deletedAt`, que es la única fuente de verdad de la condición
+   * activa/anulada.
+   *
+   * No pide motivo, a diferencia de anular: anular quita plata de la
+   * cuenta del otro y necesita justificarse; restablecer solo deshace eso.
+   * Exigir un segundo motivo para corregir un error de tecleo sería un
+   * trámite sin valor.
+   *
+   * Lo que SÍ queda registrado es el rastro: quién anuló, por qué, y quién
+   * restableció y cuándo. Nada de eso se borra.
+   *
+   * @param {string} actorUserId - uid autenticado de quien restablece
+   * @param {import('../../shared/clock.js').Clock} clock
+   * @returns {Result<void>}
+   */
+  restore(actorUserId, clock) {
+    if (!this.isDeleted()) {
+      return Result.fail(
+        ValidationResult.invalid([
+          {
+            field: 'expense',
+            code: 'EXPENSE_NOT_CANCELLED',
+            message: 'Este gasto no está anulado.',
+          },
+        ]),
+      );
+    }
+
+    const now = clock.utcNow();
+    this.deletedAt = null;
+    this.restoredAt = now;
+    this.restoredByUserId = actorUserId;
     this.updatedAt = now;
     this.updatedByUserId = actorUserId;
     return Result.ok(undefined);

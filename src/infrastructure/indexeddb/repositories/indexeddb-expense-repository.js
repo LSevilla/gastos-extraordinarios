@@ -33,6 +33,8 @@ function toRecord(expense) {
     cancelledByUserId: expense.cancelledByUserId ?? null,
     cancellationReason: expense.cancellationReason ?? null,
     settlementId: expense.settlementId ? expense.settlementId.toString() : null,
+    restoredAt: expense.restoredAt ? expense.restoredAt.toISOString() : null,
+    restoredByUserId: expense.restoredByUserId ?? null,
   };
 }
 
@@ -67,6 +69,9 @@ function fromRecord(record) {
   expense.settlementId = record.settlementId
     ? Identifier.from(record.settlementId).getValue()
     : null;
+  // Ausentes en registros anteriores = nunca se restableció.
+  expense.restoredAt = record.restoredAt ? new Date(record.restoredAt) : null;
+  expense.restoredByUserId = record.restoredByUserId ?? null;
   return expense;
 }
 

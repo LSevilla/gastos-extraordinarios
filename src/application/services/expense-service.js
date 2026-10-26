@@ -192,6 +192,36 @@ export class ExpenseService {
   }
 
   /**
+   * Deshace una anulación. El gasto vuelve a contar en los totales y en el
+   * estado de cuenta; el rastro de la anulación se conserva.
+   *
+   * Exige el mismo permiso de escritura que anular: quien puede quitar un
+   * gasto de la cuenta del otro es quien puede devolverlo.
+   *
+   * @param {import('../../shared/identifier.js').Identifier} expenseId
+   * @param {string} actorUserId
+   * @returns {Promise<Result<void>>}
+   */
+  async restoreExpense(expenseId, actorUserId) {
+    const expense = await this.deps.expenseRepo.findById(expenseId);
+    if (!expense) {
+      return Result.fail(
+        ValidationResult.invalid([
+          { field: 'expense', code: 'EXPENSE_NOT_FOUND', message: 'No se encontró el gasto.' },
+        ]),
+      );
+    }
+    const accessResult = await this.#requireWriteAccess(expense.caseId.toString(), actorUserId);
+    if (accessResult.isFailure()) return Result.fail(accessResult.getError());
+
+    const restoreResult = expense.restore(actorUserId, this.deps.clock);
+    if (restoreResult.isFailure()) return Result.fail(restoreResult.getError());
+
+    await this.deps.expenseRepo.save(expense);
+    return Result.ok(undefined);
+  }
+
+  /**
    * Gastos activos, ordenados por fecha — mismo comportamiento de siempre.
    * @param {import('../../shared/identifier.js').Identifier} caseId
    * @param {string} actorUserId

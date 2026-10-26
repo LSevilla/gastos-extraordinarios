@@ -2,6 +2,39 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.7.0-alpha.1] — Restablecer un gasto anulado
+
+Anular era una puerta de un solo sentido. Un gasto anulado por error —el
+hijo equivocado, un duplicado que no lo era— quedaba fuera de la cuenta
+para siempre, y la única salida era volver a cargarlo, lo que dejaba dos
+registros del mismo gasto y un historial que no se entiende.
+
+### Agregado
+
+- **Botón "Restablecer gasto"** en el detalle de un gasto anulado. Vuelve a
+  contar en los totales y en el estado de cuenta.
+- En un gasto anulado ya no aparecen "Editar" ni "Anular": el dominio
+  rechaza ambas, así que eran dos botones que no hacían nada. Queda solo
+  la acción que sí corresponde.
+- Si el gasto pertenece a un período ya liquidado, la ventana lo advierte
+  antes de confirmar: restablecerlo no altera esa liquidación, el gasto
+  aparece en el estado de cuenta siguiente marcado como retroactivo.
+
+### Decisiones
+
+- **No pide motivo.** Anular quita plata de la cuenta del otro y necesita
+  justificarse; restablecer solo deshace eso. Exigir un segundo motivo
+  para corregir un error de tecleo sería un trámite sin valor.
+- **No se borra nada del rastro.** Quién anuló y por qué se conservan, y se
+  agrega quién restableció y cuándo. En un caso de pensión de alimentos,
+  que un gasto estuvo anulado es parte de lo que las partes pueden
+  discutir después; el registro del gasto lo muestra completo.
+- **Mismo permiso que anular.** Quien puede quitar un gasto de la cuenta
+  del otro es quien puede devolverlo. Un rol de solo lectura no puede.
+- `restoredAt` y `restoredByUserId` viajan a la nube con el gasto. Sin
+  eso, restablecer en un dispositivo lo dejaría anulado en el otro y las
+  dos partes verían cifras distintas de la misma cuenta.
+
 ## [0.6.0-alpha.5] — Los cambios locales dejan de perderse
 
 Cierra el pendiente de alpha.4. Un cambio guardado podía desaparecer solo
