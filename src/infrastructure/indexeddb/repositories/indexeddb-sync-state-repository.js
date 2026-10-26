@@ -88,8 +88,27 @@ export class IndexedDbSyncStateRepository {
    */
   async saveConflict(conflict) {
     await runInTransaction(this.db, [STORE_NAMES.SYNC_CONFLICTS], 'readwrite', async (tx) => {
+      const store = tx.objectStore(STORE_NAMES.SYNC_CONFLICTS);
+      const previo = await promisifyRequest(
+        store.get(syncKey(conflict.entityType, conflict.entityId)),
+      );
+      // Una diferencia YA RESUELTA no vuelve a abrirse si es la misma.
+      //
+      // Antes se escribía encima sin mirar, con `resolvedAt` en blanco. El
+      // servidor reenvía todos sus documentos en cada arranque, así que
+      // las dieciocho diferencias que la persona acababa de resolver
+      // resucitaban intactas al abrir la aplicación. Se comparan las
+      // versiones: si la del servidor es la misma sobre la que ya se
+      // decidió, la decisión sigue valiendo.
+      if (
+        previo &&
+        previo.resolvedAt &&
+        previo.remoteSnapshot?.updatedAt === conflict.remoteSnapshot?.updatedAt
+      ) {
+        return;
+      }
       await promisifyRequest(
-        tx.objectStore(STORE_NAMES.SYNC_CONFLICTS).put({
+        store.put({
           key: syncKey(conflict.entityType, conflict.entityId),
           entityType: conflict.entityType,
           entityId: conflict.entityId,

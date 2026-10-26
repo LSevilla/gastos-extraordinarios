@@ -86,3 +86,106 @@ test('scheduleFlush() no hace nada si la sincronización no está activa', () =>
   coordinator.scheduleFlush();
   assert.equal(coordinator.flushTimerId, null);
 });
+
+/**
+ * Lo que se sube tiene que dejar constancia de qué versión quedó arriba.
+ * Sin esa marca, el servidor reenvía su documento en el próximo arranque y
+ * la comparación ve "cambió aquí Y cambió allá" —las dos fechas son
+ * posteriores a una memoria que nunca se actualizó— y fabrica un conflicto
+ * que no existe, uno por entidad y en cada arranque.
+ */
+
+const ACTUALIZADO = new Date('2026-10-26T12:00:00.000Z');
+
+/** Gasto con la forma mínima que el envío a Firestore recorre. */
+function gastoStub(id) {
+  const ref = { toString: () => 'x' };
+  return {
+    id,
+    caseId: ref,
+    beneficiaryId: ref,
+    category: 'Salud',
+    date: new Date('2026-10-01T00:00:00.000Z'),
+    amount: { getAmount: () => 1000, getCurrency: () => 'CLP' },
+    paidByParticipantId: ref,
+    expectedReimbursement: false,
+    documentStatus: 'documentPending',
+    documentIds: [],
+    percentagePeriodId: null,
+    notes: '',
+    createdAt: new Date('2026-10-01T00:00:00.000Z'),
+    updatedAt: ACTUALIZADO,
+    deletedAt: null,
+    createdByUserId: 'uid-1',
+    updatedByUserId: 'uid-1',
+    cancelledByUserId: null,
+    cancellationReason: null,
+    settlementId: null,
+    restoredAt: null,
+    restoredByUserId: null,
+  };
+}
+
+/** @param {string} id */
+function entradaDeCola(id) {
+  return {
+    type: 'sync:expense',
+    payload: { expenseId: id },
+    markProcessing() {},
+    markDone() {},
+    markFailed() {},
+  };
+}
+
+test('subir una entidad anota la marca de sincronización', async () => {
+  const marcadas = [];
+  const id = Identifier.generate();
+  let subidas = 0;
+  const engine = new SyncEngine({
+    operationQueueRepo: {
+      save: async () => {},
+      findPending: async () => [entradaDeCola(id.toString())],
+    },
+    syncStateRepo: {
+      markSynced: async (entityType, entityId, updatedAt) => {
+        marcadas.push({ entityType, entityId, updatedAt });
+      },
+    },
+    expenseRepo: { findById: async () => gastoStub(id) },
+    firestore: {},
+    firestoreModule: {
+      doc: () => ({}),
+      setDoc: async () => {
+        subidas += 1;
+      },
+    },
+    clock,
+  });
+
+  const result = await engine.processPending();
+
+  assert.equal(result.failed, 0);
+  assert.equal(subidas, 1);
+  assert.deepEqual(marcadas, [
+    { entityType: 'expense', entityId: id.toString(), updatedAt: ACTUALIZADO },
+  ]);
+});
+
+test('sin syncStateRepo el envío sigue funcionando', async () => {
+  const id = Identifier.generate();
+  const engine = new SyncEngine({
+    operationQueueRepo: {
+      save: async () => {},
+      findPending: async () => [entradaDeCola(id.toString())],
+    },
+    expenseRepo: { findById: async () => gastoStub(id) },
+    firestore: {},
+    firestoreModule: { doc: () => ({}), setDoc: async () => {} },
+    clock,
+  });
+
+  const result = await engine.processPending();
+
+  assert.equal(result.failed, 0);
+  assert.equal(result.processed, 1);
+});

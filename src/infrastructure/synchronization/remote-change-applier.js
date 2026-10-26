@@ -278,11 +278,23 @@ export class RemoteChangeApplier {
           );
         },
       );
+    } else {
+      // Elegir lo de este dispositivo no toca el registro: ya es el que
+      // está guardado. Pero SÍ hay que anotar que esta es la versión
+      // acordada. Sin esa marca, la memoria de sincronización se quedaba
+      // en un valor viejo, el servidor reenviaba su documento en el
+      // siguiente arranque y la comparación volvía a ver dos cambios
+      // donde ya había una decisión tomada: la misma diferencia
+      // reaparecía una y otra vez.
+      const localUpdatedAt = conflict.localSnapshot?.updatedAt
+        ? new Date(conflict.localSnapshot.updatedAt)
+        : null;
+      if (localUpdatedAt && !Number.isNaN(localUpdatedAt.getTime())) {
+        await this.deps.syncStateRepo.markSynced(entityType, entityId, localUpdatedAt);
+      }
     }
-    // Si elige lo local no se toca el registro: ya es el que está guardado.
-    // Tampoco se marca como sincronizado, justamente para que el próximo
-    // envío lo suba y sobrescriba la versión remota — que es lo que la
-    // persona acaba de pedir.
+    // El envío de la versión local lo encola quien llama (ConflictService):
+    // el aplicador no conoce la cola.
 
     await this.deps.syncStateRepo.markConflictResolved(entityType, entityId, choice, now);
     return true;

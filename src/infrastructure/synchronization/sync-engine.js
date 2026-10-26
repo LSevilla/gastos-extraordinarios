@@ -43,6 +43,7 @@ export class SyncEngine {
    *   firestore: import('firebase/firestore').Firestore,
    *   firestoreModule: object,
    *   clock: import('../../shared/clock.js').Clock,
+   *   syncStateRepo?: {markSynced: (entityType: string, entityId: string, updatedAt: Date) => Promise<void>},
    * }} deps
    */
   constructor(deps) {
@@ -328,6 +329,26 @@ export class SyncEngine {
    * @param {{findById: (id: Identifier) => Promise<object|null>, push: (entity: object) => Promise<void>, logLabel: string}} handlers
    * @returns {Promise<boolean>}
    */
+  /**
+   * @param {string} logLabel - "sync:expense", "sync:participant", …
+   * @param {Identifier} id
+   * @param {{updatedAt?: Date}} entity
+   */
+  async #markSynced(logLabel, id, entity) {
+    if (!this.deps.syncStateRepo) return;
+    const entityType = String(logLabel).split(':')[1];
+    // Los tramos de porcentajes no llevan updatedAt; sin fecha no hay nada
+    // que recordar y se dejan fuera, no se inventa una.
+    if (!entityType || !(entity.updatedAt instanceof Date)) return;
+    try {
+      await this.deps.syncStateRepo.markSynced(entityType, id.toString(), entity.updatedAt);
+    } catch (error) {
+      // La subida ya ocurrió: fallar aquí no debe marcar la operación como
+      // fallida ni hacerla reintentar.
+      console.warn(`[${logLabel}] no se pudo anotar la marca de sincronización`, error);
+    }
+  }
+
   async #syncEntry(entry, resolveId, handlers) {
     entry.markProcessing(this.deps.clock);
     await this.deps.operationQueueRepo.save(entry);
@@ -336,6 +357,16 @@ export class SyncEngine {
       const entity = await handlers.findById(id);
       if (entity) {
         await handlers.push(entity);
+        // Dejar constancia de QUÉ versión quedó subida.
+        //
+        // Sin esto, la memoria de sincronización se quedaba en un valor
+        // viejo para siempre. En el siguiente arranque, el servidor
+        // devolvía exactamente lo que acabábamos de subir, y la
+        // comparación veía "cambió aquí Y cambió allá" —porque las dos
+        // fechas eran posteriores a esa memoria vieja— y declaraba un
+        // conflicto que no existía. Así se fabricaban diferencias solas,
+        // una por entidad y en cada arranque.
+        await this.#markSynced(handlers.logLabel, id, entity);
       }
       entry.markDone(this.deps.clock);
       await this.deps.operationQueueRepo.save(entry);

@@ -2,6 +2,46 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.7.0-alpha.3] — Las diferencias resueltas se quedan resueltas
+
+El aviso volvía con el mismo número en cada arranque aunque se hubieran
+resuelto todas. No era que la resolución fallara: las diferencias se
+fabricaban de nuevo solas.
+
+### El fallo
+
+Tres piezas encadenadas:
+
+1. **Lo que se subía no dejaba constancia de qué versión quedó arriba.**
+   El envío a la nube nunca anotaba la marca de sincronización, así que
+   esa memoria se quedaba en un valor viejo para siempre.
+2. **El servidor reenvía todos sus documentos en cada arranque.** Al
+   compararlos, las dos fechas —la de este dispositivo y la del
+   servidor— eran posteriores a esa memoria vieja, así que la regla
+   concluía "cambió aquí Y cambió allá" y declaraba un empate que no
+   existía: el documento del servidor era, literalmente, el que este
+   mismo dispositivo había subido.
+3. **Guardar una diferencia pisaba la decisión anterior.** Se escribía
+   encima con la marca de resuelto en blanco, de modo que las dieciocho
+   recién resueltas resucitaban intactas.
+
+### Corregido
+
+- Al subir una entidad se anota qué versión quedó en la nube. Sin esto se
+  fabricaba un conflicto falso por entidad y por arranque.
+- Elegir "la de este dispositivo" anota esa versión como la acordada, y
+  no solo encola su subida.
+- Guardar una diferencia ya resuelta cuya versión del servidor no ha
+  cambiado no la vuelve a abrir. Si el otro dispositivo sí la cambió
+  después, aparece como diferencia nueva, que es lo correcto.
+
+### Qué hacer al actualizar
+
+Las dieciocho diferencias siguen ahí: ningún cambio de código puede saber
+cuál de las dos versiones querías. Resuélvelas una vez más —"Resolver
+todas de una vez" sirve si sabes qué dispositivo tiene lo bueno— y esta
+vez no vuelven.
+
 ## [0.7.0-alpha.2] — El botón de restablecer se ve, y las diferencias se pueden resolver
 
 Dos fallos de cableado de pantallas. En los dos el motor estaba bien y lo

@@ -168,6 +168,9 @@ async function main() {
 
   const syncEngine = new SyncEngine({
     operationQueueRepo,
+    // Sin esto, lo que se sube no deja constancia de qué versión quedó
+    // arriba, y el próximo arranque lo confunde con un cambio ajeno.
+    syncStateRepo,
     caseRepo: rawCaseRepo,
     expenseRepo: rawExpenseRepo,
     reimbursementRepo: rawReimbursementRepo,

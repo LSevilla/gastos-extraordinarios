@@ -409,3 +409,83 @@ test('un tramo cerrado en local no vuelve a abrirse porque el remoto lo crea vig
   );
   assert.equal(stored.isCurrent, false, 'dos tramos vigentes hacen el reparto impredecible');
 });
+
+/**
+ * Reporte del 26-10-2026: "a pesar de haber resuelto las diferencias sigue
+ * apareciendo este mensaje cada vez que se abre la aplicación", con el
+ * mismo número, 18.
+ *
+ * El servidor reenvía todos sus documentos en cada arranque. Al guardar un
+ * conflicto se escribía encima del anterior con la marca de resuelto en
+ * blanco, así que las diferencias ya decididas resucitaban intactas.
+ */
+
+test('una diferencia resuelta no reaparece cuando el servidor reenvía lo mismo', async () => {
+  const { db, applier, syncStateRepo, putLocalExpense } = await buildContext();
+  const local = expenseRecord({ amount: 150000, updatedAt: '2026-10-20T12:00:00.000Z' });
+  await putLocalExpense(local);
+  await syncStateRepo.markSynced('expense', local.id, new Date('2026-10-19T00:00:00.000Z'));
+
+  const remoto = { ...local, amount: 160000, updatedAt: '2026-10-20T13:00:00.000Z' };
+  const primero = await applier.apply('expense', local.id, remoto);
+  assert.equal(primero.decision, DECISION.CONFLICT);
+  assert.equal((await syncStateRepo.findPendingConflicts(local.caseId)).length, 1);
+
+  await applier.resolveConflict('expense', local.id, 'local');
+  assert.equal((await syncStateRepo.findPendingConflicts(local.caseId)).length, 0);
+
+  // Arranque siguiente: el servidor reenvía exactamente el mismo documento.
+  await applier.apply('expense', local.id, remoto);
+
+  const pendientes = await syncStateRepo.findPendingConflicts(local.caseId);
+  assert.equal(pendientes.length, 0, 'la decisión ya tomada tiene que seguir valiendo');
+  assert.ok(db);
+});
+
+test('tras acordar la versión local, un cambio posterior del otro dispositivo entra sin preguntar', async () => {
+  const { applier, syncStateRepo, putLocalExpense, readLocalExpense } = await buildContext();
+  const local = expenseRecord({ amount: 150000, updatedAt: '2026-10-20T12:00:00.000Z' });
+  await putLocalExpense(local);
+  await syncStateRepo.markSynced('expense', local.id, new Date('2026-10-19T00:00:00.000Z'));
+
+  await applier.apply('expense', local.id, {
+    ...local,
+    amount: 160000,
+    updatedAt: '2026-10-20T13:00:00.000Z',
+  });
+  await applier.resolveConflict('expense', local.id, 'local');
+
+  // Desde la decisión, aquí no se volvió a tocar nada y allá sí: eso no es
+  // un empate, es un cambio ajeno normal. Se aplica, y NO se inventa una
+  // diferencia nueva que obligue a decidir otra vez sobre lo mismo.
+  const resultado = await applier.apply('expense', local.id, {
+    ...local,
+    amount: 170000,
+    updatedAt: '2026-10-25T09:00:00.000Z',
+  });
+
+  assert.equal(resultado.decision, DECISION.APPLY);
+  assert.equal((await readLocalExpense(local.id)).amount, 170000);
+  assert.equal((await syncStateRepo.findPendingConflicts(local.caseId)).length, 0);
+});
+
+test('elegir lo de este dispositivo deja anotada esa versión como la acordada', async () => {
+  const { applier, syncStateRepo, putLocalExpense } = await buildContext();
+  const local = expenseRecord({ amount: 150000, updatedAt: '2026-10-20T12:00:00.000Z' });
+  await putLocalExpense(local);
+  await syncStateRepo.markSynced('expense', local.id, new Date('2026-10-19T00:00:00.000Z'));
+  await applier.apply('expense', local.id, {
+    ...local,
+    amount: 160000,
+    updatedAt: '2026-10-20T13:00:00.000Z',
+  });
+
+  await applier.resolveConflict('expense', local.id, 'local');
+
+  const marca = await syncStateRepo.getLastSyncedUpdatedAt('expense', local.id);
+  assert.equal(
+    marca.toISOString(),
+    '2026-10-20T12:00:00.000Z',
+    'sin esta marca la misma diferencia se vuelve a detectar en cada arranque',
+  );
+});
