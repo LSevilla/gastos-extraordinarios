@@ -807,3 +807,31 @@ body.has-modal-open {
     transform: none;
   }
 }
+
+/* Tabla de la pantalla de diferencias entre dispositivos. Dos columnas de
+   valores que se comparan de un vistazo; la de este dispositivo destacada,
+   porque es la que la persona reconoce. */
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-auxiliar);
+}
+
+.diff-table th {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-texto-secundario);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.diff-table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-borde);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.diff-table tr:last-child td {
+  border-bottom: none;
+}

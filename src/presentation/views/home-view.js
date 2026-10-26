@@ -136,7 +136,18 @@ export function renderHome(root, deps) {
       ? `${deps.conflictCount} dato${deps.conflictCount === 1 ? '' : 's'} cambiado${deps.conflictCount === 1 ? '' : 's'} en los dos dispositivos`
       : syncStatusLabel(deps.syncStatus);
 
-    if (deps.onSyncNow && deps.syncStatus !== 'synced') {
+    // Con diferencias pendientes, "Sincronizar ahora" era el botón
+    // equivocado: vacía la cola de envío y no resuelve ninguna, así que el
+    // recuento seguía ahí después de pulsarlo, una y otra vez. Lo que hace
+    // falta es ir a decidir cuál versión queda.
+    if (hasConflicts && deps.onReviewConflicts) {
+      const reviewButton = document.createElement('button');
+      reviewButton.type = 'button';
+      reviewButton.className = 'link-button';
+      reviewButton.textContent = 'Revisar diferencias';
+      reviewButton.addEventListener('click', deps.onReviewConflicts);
+      syncRow.appendChild(reviewButton);
+    } else if (deps.onSyncNow && deps.syncStatus !== 'synced') {
       const retryButton = document.createElement('button');
       retryButton.type = 'button';
       retryButton.className = 'link-button';

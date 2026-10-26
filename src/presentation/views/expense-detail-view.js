@@ -81,7 +81,13 @@ export async function renderExpenseDetail(root, deps) {
   const netResult = await deps.reimbursementService.getExpenseNet(expense.id, deps.actorUserId);
   const net = netResult.isSuccess() ? netResult.getValue() : null;
 
+  // OJO: la tarjeta de acciones se mostraba solo si el gasto NO estaba
+  // anulado, así que el botón de restablecer —que vive dentro de ella—
+  // nunca llegaba a verse. Quien decide QUÉ acciones caben según el estado
+  // es renderActionsCard(); aquí solo se decide si hay permiso de
+  // escritura. Duplicar la condición en los dos sitios fue el error.
   const canEdit = deps.canWrite && !expense.isDeleted();
+  const canAct = deps.canWrite;
 
   root.innerHTML = '';
   const container = document.createElement('div');
@@ -106,7 +112,7 @@ export async function renderExpenseDetail(root, deps) {
     renderReimbursementsCard(),
     renderDocumentsCard(),
   );
-  if (canEdit) container.appendChild(renderActionsCard());
+  if (canAct) container.appendChild(renderActionsCard());
   container.appendChild(renderAuditCard());
 
   root.appendChild(container);

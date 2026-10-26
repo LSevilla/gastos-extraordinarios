@@ -167,3 +167,59 @@ test('lo remoto se fusiona sobre lo local, no lo reemplaza entero', async () => 
     'Un documento remoto al que le falte un campo dejaría el registro local incompleto.',
   );
 });
+
+/**
+ * Dos fallos reportados el 26-10-2026, los dos de cableado de vistas:
+ *   1. El botón "Restablecer gasto" existía pero no se veía nunca: la
+ *      tarjeta de acciones entera estaba condicionada a que el gasto NO
+ *      estuviera anulado, que es justo el único caso en que ese botón
+ *      tiene sentido.
+ *   2. El aviso "N datos cambiados en los dos dispositivos" no se iba
+ *      nunca, porque el único botón a mano vaciaba la cola de envío sin
+ *      resolver ninguna diferencia.
+ */
+
+test('la tarjeta de acciones del gasto no depende de que esté activo', async () => {
+  const source = await readFile('src/presentation/views/expense-detail-view.js', 'utf8');
+  assert.match(
+    source,
+    /if \(canAct\) container\.appendChild\(renderActionsCard\(\)\);/,
+    'Condicionarla a !isDeleted() deja el botón de restablecer inalcanzable.',
+  );
+  assert.match(source, /const canAct = deps\.canWrite;/);
+  const card = source.slice(
+    source.indexOf('function renderActionsCard()'),
+    source.indexOf('function renderAuditCard()'),
+  );
+  assert.match(card, /Restablecer gasto/, 'la tarjeta debe ofrecer restablecer');
+  assert.match(
+    card,
+    /if \(expense\.isDeleted\(\)\)/,
+    'y es ella quien decide qué acciones caben según el estado',
+  );
+});
+
+test('el aviso de diferencias lleva a la pantalla que las resuelve', async () => {
+  const home = await readFile('src/presentation/views/home-view.js', 'utf8');
+  assert.match(
+    home,
+    /if \(hasConflicts && deps\.onReviewConflicts\)/,
+    'Con diferencias pendientes el botón debe ser "Revisar diferencias", no "Sincronizar ahora".',
+  );
+  const app = await readFile(APP, 'utf8');
+  assert.match(app, /onReviewConflicts: \(\) => navigate\('conflicts'\)/);
+  assert.match(app, /view === 'conflicts'/, 'la ruta debe existir');
+});
+
+test('resolver una diferencia recalcula el recuento del aviso', async () => {
+  const app = await readFile(APP, 'utf8');
+  const ruta = app.slice(
+    app.indexOf("if (view === 'conflicts')"),
+    app.indexOf("view === 'manageCase'"),
+  );
+  assert.match(
+    ruta,
+    /currentConflictCount = pendientes\.length/,
+    'Sin recalcular, el aviso sigue mostrando un número que ya no es.',
+  );
+});

@@ -193,6 +193,34 @@ export class SyncEngine {
   }
 
   /**
+   * Encola el envío de una entidad por su tipo. Lo necesita la resolución
+   * de diferencias: quedarse con la versión de este dispositivo solo vale
+   * si además se sube, o el servidor conserva la otra y la diferencia
+   * vuelve a aparecer en el próximo arranque.
+   *
+   * @param {string} entityType
+   * @param {string} entityId
+   * @returns {Promise<boolean>} false si el tipo no se sincroniza
+   */
+  async enqueueByEntityType(entityType, entityId) {
+    const id = Identifier.from(entityId).getValue();
+    const porTipo = {
+      case: () => this.enqueueCaseSync(id),
+      expense: () => this.enqueueExpenseSync(id),
+      reimbursement: () => this.enqueueReimbursementSync(id),
+      settlement: () => this.enqueueSettlementSync(id),
+      payment: () => this.enqueuePaymentSync(id),
+      participant: () => this.enqueueParticipantSync(id),
+      beneficiary: () => this.enqueueBeneficiarySync(id),
+      percentagePeriod: () => this.enqueuePercentagePeriodSync(id),
+    };
+    const encolar = porTipo[entityType];
+    if (!encolar) return false;
+    await encolar();
+    return true;
+  }
+
+  /**
    * Procesa toda la cola pendiente — pensado para llamarse periódicamente
    * o al recuperar la conexión, nunca de forma síncrona con la acción del
    * usuario.

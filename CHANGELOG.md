@@ -2,6 +2,43 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Versionado según SemVer (Handbook, Capítulo 14).
 
+## [0.7.0-alpha.2] — El botón de restablecer se ve, y las diferencias se pueden resolver
+
+Dos fallos de cableado de pantallas. En los dos el motor estaba bien y lo
+que faltaba era que la interfaz lo ofreciera.
+
+### Corregido
+
+- **"Restablecer gasto" no se veía nunca.** La tarjeta de acciones entera
+  estaba condicionada a que el gasto NO estuviera anulado — justo el único
+  caso en que ese botón tiene sentido. La condición estaba duplicada: en
+  el armado de la pantalla y dentro de la tarjeta. Ahora afuera solo se
+  comprueba el permiso de escritura, y la tarjeta decide qué acciones
+  caben según el estado. Error introducido en 0.7.0-alpha.1.
+
+### Agregado
+
+- **Pantalla "Diferencias entre dispositivos".** El aviso del inicio
+  —"N datos cambiados en los dos dispositivos"— no se iba nunca: la
+  aplicación detectaba las diferencias y sabía resolverlas, pero no había
+  ninguna pantalla que lo ofreciera, y el único botón a mano
+  ("Sincronizar ahora") vacía la cola de envío sin resolver ninguna. Por
+  eso el recuento solo crecía.
+
+  La pantalla muestra, para cada diferencia, qué dato cambió y los dos
+  valores lado a lado, y deja elegir cuál queda. Nunca dice "conflicto",
+  "local" ni "remoto": habla de este dispositivo y del otro.
+
+- **Resolver todas de una vez**, con confirmación y el número delante.
+  Decidir de a una sobre dieciocho no es una decisión informada, es un
+  trámite que nadie termina.
+- Con diferencias pendientes, el aviso del inicio pasa a decir **"Revisar
+  diferencias"** y lleva a esa pantalla.
+- Quedarse con la versión de este dispositivo ahora **encola su subida**.
+  Sin eso el servidor conservaba la otra versión y la diferencia
+  reaparecía en el próximo arranque.
+- Un rol de solo lectura ve las diferencias pero no puede decidir.
+
 ## [0.7.0-alpha.1] — Restablecer un gasto anulado
 
 Anular era una puerta de un solo sentido. Un gasto anulado por error —el

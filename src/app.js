@@ -17,6 +17,7 @@ import { IndexedDbParticipantRepository } from './infrastructure/indexeddb/repos
 import { IndexedDbPercentagePeriodRepository } from './infrastructure/indexeddb/repositories/indexeddb-percentage-period-repository.js';
 import { IndexedDbBeneficiaryRepository } from './infrastructure/indexeddb/repositories/indexeddb-beneficiary-repository.js';
 import { IndexedDbAppSettingsRepository } from './infrastructure/indexeddb/repositories/indexeddb-app-settings-repository.js';
+import { ConflictService } from './application/services/conflict-service.js';
 import { AppSettings } from './domain/configuration/app-settings.js';
 import { IndexedDbExpenseRepository } from './infrastructure/indexeddb/repositories/indexeddb-expense-repository.js';
 import { IndexedDbDocumentRepository } from './infrastructure/indexeddb/repositories/indexeddb-document-repository.js';
@@ -70,6 +71,7 @@ import { renderIncompleteCase } from './presentation/views/incomplete-case-view.
 import { roleLabel } from './presentation/components/role-labels.js';
 
 import { renderManageCase } from './presentation/views/manage-case-view.js';
+import { renderConflicts } from './presentation/views/conflicts-view.js';
 import { renderBeneficiaries } from './presentation/views/beneficiaries-view.js';
 import { renderAccountStatement } from './presentation/views/account-statement-view.js';
 import { renderRegisterExpense } from './presentation/views/register-expense-view.js';
@@ -241,9 +243,13 @@ async function main() {
   // cambiaba antes de llegar a esa línea, lanzaba ReferenceError y rompía la
   // aplicación en marcha.
   let lastView = null;
+  // Se nombra en vez de construirse dentro del coordinador: la pantalla de
+  // diferencias necesita el MISMO aplicador para resolverlas.
+  const remoteChangeApplier = new RemoteChangeApplier({ db, syncStateRepo, clock });
+  const conflictService = new ConflictService({ syncStateRepo, remoteChangeApplier, syncEngine });
   const syncCoordinator = new SyncCoordinator({
     syncEngine,
-    remoteChangeApplier: new RemoteChangeApplier({ db, syncStateRepo, clock }),
+    remoteChangeApplier,
     operationQueueRepo,
     syncStateRepo,
     onStatusChange: (status, detail) => {
@@ -524,7 +530,23 @@ async function main() {
         .map((entry) => entry.payload.expenseId),
     );
 
-    if (view === 'manageCase') {
+    if (view === 'conflicts') {
+      await renderConflicts(root, {
+        conflictService,
+        caseId: summary.caseEntity.id,
+        canWrite: canWriteExpenses,
+        // Al resolver cambia el recuento del aviso del inicio; se recalcula
+        // enseguida para que no siga mostrando un número que ya no es.
+        onChanged: async () => {
+          const pendientes = await syncStateRepo.findPendingConflicts(
+            summary.caseEntity.id.toString(),
+          );
+          currentConflictCount = pendientes.length;
+          syncCoordinator.syncNow('conflict-resolved');
+        },
+        onBack: () => navigate('home'),
+      });
+    } else if (view === 'manageCase') {
       // Con `await`: sin él, un fallo al leer los datos escapaba del
       // try/catch de navigate() y dejaba la pantalla en blanco en vez de
       // mostrar el aviso de error.
@@ -678,6 +700,10 @@ async function main() {
         syncStatus: currentSyncStatus,
         conflictCount: currentConflictCount,
         onSyncNow: () => syncCoordinator.syncNow('manual'),
+        // Sin esto, el aviso de diferencias no tenía adónde llevar:
+        // "Sincronizar ahora" vacía la cola de envío y no resuelve nada,
+        // así que el recuento quedaba en pantalla para siempre.
+        onReviewConflicts: () => navigate('conflicts'),
       });
     }
   }
